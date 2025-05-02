@@ -29,10 +29,14 @@ import requests
 from bs4 import BeautifulSoup
 import csv # Import csv module
 from duckduckgo_search import DDGS # Import for web search
+import aiohttp # For Chutes AI API
+import re
 
 
 # Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file in the parent directory
+dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(dotenv_path=dotenv_path)
 
 if platform.system() == 'Windows':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -41,11 +45,14 @@ from flask import Flask, request, session, redirect, url_for
 
 # --- Configuration ---
 # Path to store chat histories
-CHAT_STORAGE = "../chats.json" # Adjusted path relative to flask_app/app.py
+CHAT_STORAGE = os.path.join(os.path.dirname(__file__), '..', "chats.json") # Already adjusted
 # API Keys loaded from .env
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+print(f"--- GOOGLE_API_KEY Loaded: {'Exists' if GOOGLE_API_KEY else 'Not Found'} ---") # API Key Load Check
 
+CHUTES_API_KEY = os.getenv("CHUTES_API_KEY")
 # Map user-facing model names to provider-specific names if they differ
 # Based on Groq error message and user list
 GROQ_MODEL_NAME_MAP = {
@@ -58,16 +65,44 @@ GROQ_MODEL_NAME_MAP = {
 }
 # Models we KNOW should target specific providers if selected (using user-facing names)
 # Ensure keys from the map are included if they are also display names
-GROQ_TARGET_MODELS = set(GROQ_MODEL_NAME_MAP.keys()) | {"gemma2-9b-it", "llama3-8b-8192", "llama3-70b-8192"}
-CEREBRAS_TARGET_MODELS = {"llama-3.1-8b", "llama-3.3-70b"} # User-facing names
+# GROQ_TARGET_MODELS is now replaced by dynamic GROQ_MODELS_CACHE (Removed line)
+CEREBRAS_TARGET_MODELS = {"llama-3.1-8b", "llama-3.3-70b", "llama-4-scout"} # Keep Cerebras hardcoded for now
+# Update Google models based on user feedback and potential scraped names
+GOOGLE_TARGET_MODELS = {"Gemini 2.5 Flash", "Gemini 2.5 Pro"} # Corrected Google AI Studio models
+
+# --- Add Display Name Mapping (Moved Higher) ---
+MODEL_DISPLAY_NAME_MAP = {
+    "meta-llama/llama-4-maverick-17b-128e-instruct": "Llama 4 Maverick",
+    "qwen-qwq-32b": "QwQ-32B", # Added display name for QwQ
+    # Add mappings for Gemini variants to ensure consistent display
+    "Gemini 2.5 Flash": "Gemini 2.5 Flash",
+    "Gemini 2.0 Flash (AI Studio)": "Gemini 2.5 Flash", # Map potential internal name
+    "Gemini 2.5 Pro": "Gemini 2.5 Pro",
+    "Gemini 1.5 Pro (AI Studio)": "Gemini 2.5 Pro"  # Map potential internal name
+}
+# --- End Display Name Mapping ---
 
 # Provider names as they might appear in the scraped data (case-insensitive check recommended)
 SCRAPED_PROVIDER_NAME_CEREBRAS = "Cerebras"
 SCRAPED_PROVIDER_NAME_GROQ = "Groq"
 
+
+# Chutes AI Config
+CHUTES_API_URL = "https://llm.chutes.ai/v1"
+CHUTES_MODELS_CACHE = [] # Cache for models fetched from Chutes API
+
+# Groq API Config
+GROQ_API_URL = "https://api.groq.com/openai/v1"
+GROQ_MODELS_CACHE = [] # Cache for models fetched from Groq API
 # Performance Data Config
 PROVIDER_PERFORMANCE_URL = "https://artificialanalysis.ai/leaderboards/providers"
-PERFORMANCE_CSV_PATH = "./provider_performance.csv" # Path relative to flask_app
+# --- Corrected Performance Data Path ---
+# Get the directory where app.py is located
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# Define CSV path relative to the app directory
+PERFORMANCE_CSV_PATH = os.path.join(APP_DIR, "provider_performance.csv")
+print(f"--- Performance CSV path set to: {PERFORMANCE_CSV_PATH} ---") # Add print for verification
+# --- End Corrected Path ---
 # --- End Configuration ---
 
 
@@ -99,27 +134,40 @@ def scrape_provider_performance(url=PROVIDER_PERFORMANCE_URL):
             return []
         rows = tbody.find_all('tr')
         print(f"--- Found {len(rows)} rows in the table body. ---")
+        # Expected column indices (adjust if the table layout changes)
+        PROVIDER_COL = 0
+        MODEL_COL = 1
+        INTELLIGENCE_INDEX_COL = 3 # Assuming 4th column
+        TOKENS_PER_S_COL = 5      # Assuming 6th column
+        RESPONSE_TIME_COL = 7   # Assuming 8th column
+        EXPECTED_COLS = max(PROVIDER_COL, MODEL_COL, INTELLIGENCE_INDEX_COL, TOKENS_PER_S_COL, RESPONSE_TIME_COL) + 1
+
         for row_index, row in enumerate(rows):
             cols = row.find_all('td')
-            if len(cols) >= 8:
+            if len(cols) >= EXPECTED_COLS:
                 try:
-                    provider_img = cols[0].find('img')
-                    provider = provider_img['alt'].replace(' logo', '').strip() if provider_img and provider_img.has_attr('alt') else cols[0].get_text(strip=True)
-                    model = cols[1].get_text(strip=True)
-                    tokens_per_s_str = cols[5].get_text(strip=True)
-                    response_time_str = cols[7].get_text(strip=True).lower().replace('s', '').strip()
+                    provider_img = cols[PROVIDER_COL].find('img')
+                    provider = provider_img['alt'].replace(' logo', '').strip() if provider_img and provider_img.has_attr('alt') else cols[PROVIDER_COL].get_text(strip=True)
+                    model = cols[MODEL_COL].get_text(strip=True)
+                    tokens_per_s_str = cols[TOKENS_PER_S_COL].get_text(strip=True)
+                    response_time_str = cols[RESPONSE_TIME_COL].get_text(strip=True).lower().replace('s', '').strip()
+                    intelligence_index_str = cols[INTELLIGENCE_INDEX_COL].get_text(strip=True)
 
-                    try:
-                        tokens_per_s = float(tokens_per_s_str) if tokens_per_s_str.lower() != 'n/a' else 0.0
+                    # Convert tokens per second
+                    try: tokens_per_s = float(tokens_per_s_str) if tokens_per_s_str.lower() != 'n/a' else 0.0
                     except ValueError: tokens_per_s = 0.0
-                    try:
-                        response_time_s = float(response_time_str) if response_time_str.lower() != 'n/a' else float('inf')
+                    # Convert response time
+                    try: response_time_s = float(response_time_str) if response_time_str.lower() != 'n/a' else float('inf')
                     except ValueError: response_time_s = float('inf')
+                    # Convert intelligence index
+                    try: intelligence_index = int(intelligence_index_str) if intelligence_index_str.isdigit() else 0 # Default to 0 if not a digit
+                    except ValueError: intelligence_index = 0 # Default to 0 on conversion error
 
                     if provider and model:
                         performance_data.append({
                             'provider_name_scraped': provider,
                             'model_name_scraped': model,
+                            'intelligence_index': intelligence_index, # Added
                             'response_time_s': response_time_s,
                             'tokens_per_s': tokens_per_s
                         })
@@ -139,21 +187,31 @@ def scrape_provider_performance(url=PROVIDER_PERFORMANCE_URL):
     if not performance_data:
          print("--- Warning: Scraping finished but no performance data was extracted. ---")
     else:
-        print(f"--- Successfully scraped {len(performance_data)} performance entries. ---")
+        print(f"--- Successfully scraped {len(performance_data)} performance entries (including intelligence index). ---")
     return performance_data
 
 def save_performance_to_csv(data, filepath=PERFORMANCE_CSV_PATH):
     """Saves the performance data list to a CSV file."""
     if not data:
-        print("--- No performance data to save. ---")
+        print("--- No performance data to save. --- ")
         return False
-    header = data[0].keys()
-    print(f"--- Saving {len(data)} performance entries to {filepath} ---")
+    # Ensure all expected keys are present in the first row for the header
+    # Add default values if keys are missing in the first row
+    default_entry = {'provider_name_scraped': '', 'model_name_scraped': '', 'intelligence_index': 0, 'response_time_s': float('inf'), 'tokens_per_s': 0.0}
+    header = list(default_entry.keys()) # Use defined order
+    print(f"--- Saving {len(data)} performance entries to {filepath} with header: {header} ---")
     try:
         with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=header)
             writer.writeheader()
-            writer.writerows(data)
+            # Write data, ensuring all header fields exist in each row
+            for row_data in data:
+                # Create a new dict with default values, update with actual row data
+                row_to_write = default_entry.copy()
+                row_to_write.update(row_data)
+                # Ensure only keys defined in the header are written
+                filtered_row = {key: row_to_write.get(key, default_entry[key]) for key in header}
+                writer.writerow(filtered_row)
         print("--- Performance data saved successfully. ---")
         return True
     except IOError as e:
@@ -173,14 +231,41 @@ def load_performance_from_csv(filepath=PERFORMANCE_CSV_PATH):
     try:
         with open(filepath, 'r', newline='', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
+            # Define expected numeric fields and their defaults/types
+            numeric_fields = {
+                'intelligence_index': (int, 0),
+                'response_time_s': (float, float('inf')),
+                'tokens_per_s': (float, 0.0)
+            }
             for row in reader:
+                processed_row = {} # Store processed data for this row
                 try:
-                    # Ensure correct types are loaded
-                    row['response_time_s'] = float(row.get('response_time_s', 'inf'))
-                    row['tokens_per_s'] = float(row.get('tokens_per_s', '0.0'))
-                    data.append(row)
-                except (ValueError, TypeError) as e:
-                    print(f"--- Warning: Skipping row due to conversion error in CSV: {row}. Error: {e} ---")
+                    # Copy non-numeric fields first
+                    for key in row:
+                        if key not in numeric_fields:
+                            processed_row[key] = row.get(key, '') # Default to empty string if somehow missing
+
+                    # Process numeric fields with type conversion and error handling
+                    for field, (dtype, default_val) in numeric_fields.items():
+                        value_str = row.get(field) # Get the string value from CSV
+                        if value_str:
+                            try:
+                                processed_row[field] = dtype(value_str)
+                            except (ValueError, TypeError):
+                                print(f"--- Warning: Could not convert '{field}' value '{value_str}' to {dtype.__name__}. Using default {default_val}. Row: {row} ---")
+                                processed_row[field] = default_val
+                        else:
+                            # Handle missing column or empty value
+                            # Temporarily comment out this specific warning to reduce log noise
+                            # print(f"--- Warning: Missing or empty value for '{field}'. Using default {default_val}. Row: {row} ---")
+                            processed_row[field] = default_val
+
+                    data.append(processed_row)
+
+                except Exception as e:
+                    # Catch unexpected errors during row processing
+                    print(f"--- Warning: Skipping row due to unexpected error: {row}. Error: {e} ---")
+
         print(f"--- Loaded {len(data)} performance entries from CSV. ---")
     except IOError as e:
         print(f"--- Error loading performance data from CSV: {e} ---")
@@ -240,6 +325,95 @@ def save_chats(chats):
     except Exception as e:
         print(f"Error saving chats to {CHAT_STORAGE}: {e}")
 
+# --- Chutes AI Integration ---
+
+async def fetch_chutes_models():
+    """Fetches the list of available models from the Chutes AI API."""
+    global CHUTES_MODELS_CACHE
+    if not CHUTES_API_KEY:
+        print("--- Chutes API Key not found, skipping model fetch. ---")
+        CHUTES_MODELS_CACHE = []
+        return
+
+    headers = {
+        "Authorization": f"Bearer {CHUTES_API_KEY}",
+        "Accept": "application/json" # Explicitly ask for JSON
+    }
+    models_url = f"{CHUTES_API_URL}/models"
+    print(f"--- Fetching models from Chutes AI: {models_url} ---")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(models_url, headers=headers, timeout=15) as response:
+                response.raise_for_status() # Raise error for bad status codes
+                data = await response.json()
+                # Assuming the structure is like OpenAI's: {'data': [{'id': 'model-name', ...}, ...]}
+                if isinstance(data, dict) and 'data' in data and isinstance(data['data'], list):
+                    CHUTES_MODELS_CACHE = [model.get('id') for model in data['data'] if model.get('id')]
+                    print(f"--- Found {len(CHUTES_MODELS_CACHE)} models from Chutes AI: {CHUTES_MODELS_CACHE[:5]}... ---")
+                else:
+                    print(f"--- Unexpected format received from Chutes AI /models endpoint: {data} ---")
+                    CHUTES_MODELS_CACHE = []
+
+    except aiohttp.ClientError as e:
+        print(f"--- Error fetching models from Chutes AI (ClientError): {e} ---")
+        CHUTES_MODELS_CACHE = []
+    except asyncio.TimeoutError:
+        print("--- Error fetching models from Chutes AI: Request timed out. ---")
+        CHUTES_MODELS_CACHE = []
+    except json.JSONDecodeError as e:
+        print(f"--- Error decoding JSON response from Chutes AI /models: {e} ---")
+        CHUTES_MODELS_CACHE = []
+    except Exception as e:
+        print(f"--- Unexpected error fetching models from Chutes AI: {e} ---")
+
+# --- Groq API Integration ---
+
+async def fetch_groq_models():
+    """Fetches the list of available models from the Groq API."""
+    global GROQ_MODELS_CACHE
+    if not GROQ_API_KEY:
+        print("--- Groq API Key not found, skipping model fetch. ---")
+        GROQ_MODELS_CACHE = []
+        return
+
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Accept": "application/json"
+    }
+    models_url = f"{GROQ_API_URL}/models"
+    print(f"--- Fetching models from Groq API: {models_url} ---")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(models_url, headers=headers, timeout=15) as response:
+                response.raise_for_status()
+                data = await response.json()
+                # Assuming structure {'data': [{'id': 'model-name', ...}, ...]}
+                if isinstance(data, dict) and 'data' in data and isinstance(data['data'], list):
+                    GROQ_MODELS_CACHE = [model.get('id') for model in data['data'] if model.get('id')]
+                    print(f"--- Found {len(GROQ_MODELS_CACHE)} models from Groq API: {GROQ_MODELS_CACHE[:5]}... ---")
+                else:
+                    print(f"--- Unexpected format received from Groq API /models endpoint: {data} ---")
+                    GROQ_MODELS_CACHE = []
+
+    except aiohttp.ClientError as e:
+        print(f"--- Error fetching models from Groq API (ClientError): {e} ---")
+        GROQ_MODELS_CACHE = []
+    except asyncio.TimeoutError:
+        print("--- Error fetching models from Groq API: Request timed out. ---")
+        GROQ_MODELS_CACHE = []
+    except json.JSONDecodeError as e:
+        print(f"--- Error decoding JSON response from Groq API /models: {e} ---")
+        GROQ_MODELS_CACHE = []
+    except Exception as e:
+        print(f"--- Unexpected error fetching models from Groq API: {e} ---")
+        GROQ_MODELS_CACHE = []
+
+# --- End Groq API Integration ---
+
+# --- End Chutes AI Integration ---
+
 # --- Global variable to store scraped performance data ---
 PROVIDER_PERFORMANCE_CACHE = [] # Initialize cache at module level
 
@@ -256,74 +430,226 @@ Session(app)
 # Function to dynamically get models and provider counts, sorted by priority
 def get_available_models_with_provider_counts():
     """
-    Dynamically retrieves available models from g4f, counts their working providers,
-    and sorts them based on a predefined priority list and provider count.
+    Dynamically retrieves available models, combines with performance data,
+    and sorts them based on a predefined priority list and response time.
     Returns:
         list: A sorted list of tuples: [(model_name, provider_count), ...]
-        dict: A dictionary mapping model names to a list of their *working provider class objects*.
+        dict: A dictionary mapping model names to a list of their provider identifiers (classes or strings).
         dict: A map of lowercase provider names to provider class objects.
     """
     available_models_dict = {}
     model_provider_info = {}
     provider_class_map = {} # Initialize map
-    try: # Restore the main try block for the function
-        print("--- Fetching available models and providers ---")
-        # Get provider classes using ProviderUtils if available
+    try:
+        print("--- Fetching available models and providers --- ")
         if ProviderUtils:
             provider_classes = ProviderUtils.convert.values()
             provider_class_map = {prov.__name__.lower(): prov for prov in provider_classes}
         else:
-            print("--- ProviderUtils not available, cannot map provider names. ---")
-            return [], {}, {}
+            print("--- ProviderUtils not available, cannot map provider names. --- ")
+            # Proceed without class map if needed, direct calls might fail
 
         for model in ModelUtils.convert.values():
             working_providers_list = []
             if isinstance(model.best_provider, IterListProvider):
-                # Filter providers that are actually working
                 working_providers_list = [p for p in model.best_provider.providers if p.working]
             elif model.best_provider is not None and model.best_provider.working:
                 working_providers_list = [model.best_provider]
 
-            if working_providers_list: # Only add models with at least one working provider
+            if working_providers_list:
                 available_models_dict[model.name] = len(working_providers_list)
-                model_provider_info[model.name] = working_providers_list # Store the list of working provider classes
-        print(f"--- Finished fetching models. Found {len(available_models_dict)} models with working providers. ---")
-    except Exception as e: # Correctly associate except with the try
-        print(f"Error dynamically loading models: {e}")
-        return [], {}, {} # Return empty dicts on error
+                model_provider_info[model.name] = working_providers_list
+        print(f"--- Finished fetching g4f models. Found {len(available_models_dict)} models with working providers. ---")
+    except Exception as e:
+        print(f"Error dynamically loading g4f models: {e}")
 
-    # Define priority models (Example: prioritize o3-mini if available)
-    priority_order = ["o3-mini", "o1", "deepseek-r1", "deepseek-v3"] # Added o3-mini
-    priority_models_sorted = []
-    other_models = {}
-    for name, count in available_models_dict.items():
-        if name in priority_order:
-            priority_models_sorted.append((priority_order.index(name), name, count))
-        else: other_models[name] = count
-    priority_models_sorted.sort()
-    final_priority_list = [(name, count) for _, name, count in priority_models_sorted]
-    # Sort other models primarily by provider count (descending), then alphabetically
-    other_models_sorted = sorted(other_models.items(), key=lambda item: (-item[1], item[0]))
-    return final_priority_list + other_models_sorted, model_provider_info, provider_class_map
+    # --- Integrate external/direct providers --- 
+    # Chutes AI
+    print(f"--- Integrating Chutes models ({len(CHUTES_MODELS_CACHE)} found)... ---")
+    for chutes_model_name in CHUTES_MODELS_CACHE:
+        provider_id = "ChutesAIProvider"
+        if chutes_model_name not in available_models_dict:
+            available_models_dict[chutes_model_name] = 1
+            model_provider_info[chutes_model_name] = [provider_id]
+        elif provider_id not in model_provider_info[chutes_model_name]:
+            if isinstance(model_provider_info[chutes_model_name], list):
+                model_provider_info[chutes_model_name].append(provider_id)
+            else: # Convert single provider to list
+                model_provider_info[chutes_model_name] = [model_provider_info[chutes_model_name], provider_id]
+            available_models_dict[chutes_model_name] += 1
 
+    # Groq API
+    print(f"--- Integrating Groq models ({len(GROQ_MODELS_CACHE)} found)... ---")
+    for groq_model_name in GROQ_MODELS_CACHE:
+        provider_id = "GroqAPIProvider"
+        # Check if the *actual Groq model ID* is already a key
+        if groq_model_name not in available_models_dict:
+            available_models_dict[groq_model_name] = 1
+            model_provider_info[groq_model_name] = [provider_id]
+        # Also check if the *user-facing name* might exist from g4f and add Groq as provider
+        # Example: user selects "llama-4-scout", g4f has it, Groq has "meta-llama/llama-4-scout..."
+        # We need to handle this potential mismatch during provider selection, not necessarily here.
+        # For now, just add the explicit Groq model ID if new.
+        # Existing logic for adding provider to existing model seems okay.
+        elif provider_id not in model_provider_info[groq_model_name]:
+             if isinstance(model_provider_info[groq_model_name], list):
+                 model_provider_info[groq_model_name].append(provider_id)
+             else:
+                 model_provider_info[groq_model_name] = [model_provider_info[groq_model_name], provider_id]
+             available_models_dict[groq_model_name] += 1
+
+    # Cerebras API
+    print(f"--- Integrating Cerebras models ({len(CEREBRAS_TARGET_MODELS)} specified)... ---")
+    for cerebras_model_name in CEREBRAS_TARGET_MODELS:
+        provider_id = "CerebrasAPIProvider"
+        if cerebras_model_name not in available_models_dict:
+            available_models_dict[cerebras_model_name] = 1
+            model_provider_info[cerebras_model_name] = [provider_id]
+        elif provider_id not in model_provider_info[cerebras_model_name]:
+             if isinstance(model_provider_info[cerebras_model_name], list):
+                 model_provider_info[cerebras_model_name].append(provider_id)
+             else:
+                 model_provider_info[cerebras_model_name] = [model_provider_info[cerebras_model_name], provider_id]
+             available_models_dict[cerebras_model_name] += 1
+
+    # Google AI Studio
+    print(f"--- Integrating Google AI Studio models ({len(GOOGLE_TARGET_MODELS)} specified)... ---")
+    for google_model_name in GOOGLE_TARGET_MODELS:
+        provider_id = "GoogleAIProvider"
+        if google_model_name not in available_models_dict:
+            available_models_dict[google_model_name] = 1
+            model_provider_info[google_model_name] = [provider_id]
+        elif provider_id not in model_provider_info[google_model_name]:
+             if isinstance(model_provider_info[google_model_name], list):
+                 model_provider_info[google_model_name].append(provider_id)
+             else:
+                 model_provider_info[google_model_name] = [model_provider_info[google_model_name], provider_id]
+             available_models_dict[google_model_name] += 1
+    # --- End Integrate --- 
+
+    # --- New Sorting Logic --- 
+    print("--- Applying custom sorting based on user priority and performance ---")
+
+    # Define the user's explicit priority list (map to internal names if needed)
+    # User table order: Llama 3.3 70B (cerebras), Llama 4 Scout (cerebras/groq), Llama 4 Maverick (groq), QwQ-32B (groq), Gemini 2.5 Flash (google), Gemini 2.5 Pro (google)
+    user_priority_sequence = [
+        # Mapped internal names based on likely targets/caches:
+        "llama-3.3-70b",           # Corresponds to Cerebras Llama 3.3 70B
+        "llama-4-scout",           # Corresponds to Cerebras/Groq Llama 4 Scout
+        "meta-llama/llama-4-maverick-17b-128e-instruct", # Specific Groq ID for Llama 4 Maverick
+        "qwen-qwq-32b",            # Specific Groq ID for QwQ-32B
+        "Gemini 2.5 Flash",        # Corrected name
+        "Gemini 2.5 Pro"           # Corrected name
+    ]
+    # Filter the priority sequence to only include models actually available
+    filtered_priority_sequence = [name for name in user_priority_sequence if name in available_models_dict]
+
+    final_display_list = []
+    processed_models = set()
+
+    # 1. Add models from the filtered user priority sequence
+    print(f"--- Adding user priority models: {filtered_priority_sequence} ---")
+    for model_name in filtered_priority_sequence:
+        if model_name in available_models_dict:
+            # Fetch performance for priority models
+            best_response_time = float('inf')
+            best_intel_index = 0
+            found_perf_match = False # Debug flag
+            display_name_lower = MODEL_DISPLAY_NAME_MAP.get(model_name, model_name).lower()
+            for entry in PROVIDER_PERFORMANCE_CACHE:
+                scraped_model_lower = entry.get('model_name_scraped', '').lower()
+                model_name_lower = model_name.lower()
+                # Check internal name OR display name against scraped name
+                match = (model_name_lower == scraped_model_lower or
+                         model_name_lower in scraped_model_lower or
+                         scraped_model_lower in model_name_lower or
+                         model_name_lower.replace('-',' ') == scraped_model_lower or
+                         scraped_model_lower.replace('-',' ') == model_name_lower or
+                         # Check display name match
+                         display_name_lower == scraped_model_lower or
+                         display_name_lower in scraped_model_lower or
+                         scraped_model_lower in display_name_lower)
+
+                if match:
+                    found_perf_match = True # Mark as found
+                    response_time = entry.get('response_time_s', float('inf'))
+                    # Prioritize lower response time, then higher intelligence index
+                    current_intel_index = entry.get('intelligence_index', 0)
+                    if response_time < best_response_time:
+                        best_response_time = response_time
+                        best_intel_index = current_intel_index
+                    elif response_time == best_response_time and current_intel_index > best_intel_index:
+                        # If times are equal, prefer the one with higher intelligence
+                        best_intel_index = current_intel_index
+            # Debug print if no match found for a priority model
+            if not found_perf_match:
+                print(f"--- [Perf Debug] No performance match found in cache for priority model: {model_name} ---")
+
+            final_display_list.append((model_name, available_models_dict[model_name], best_intel_index, best_response_time))
+            processed_models.add(model_name)
+
+    # 2. Gather remaining models and their best response times/intel
+    remaining_models_with_perf = []
+    print("--- Gathering remaining models and performance scores ---")
+    for model_name, count in available_models_dict.items():
+        if model_name not in processed_models:
+            best_response_time = float('inf')
+            best_intel_index = 0
+            display_name_lower = MODEL_DISPLAY_NAME_MAP.get(model_name, model_name).lower()
+            # Search performance cache for this model
+            for entry in PROVIDER_PERFORMANCE_CACHE:
+                scraped_model_lower = entry.get('model_name_scraped', '').lower()
+                model_name_lower = model_name.lower()
+                # Use the same enhanced matching here, including display name
+                match = (model_name_lower == scraped_model_lower or
+                         model_name_lower in scraped_model_lower or
+                         scraped_model_lower in model_name_lower or
+                         model_name_lower.replace('-',' ') == scraped_model_lower or
+                         scraped_model_lower.replace('-',' ') == model_name_lower or
+                         # Check display name match
+                         display_name_lower == scraped_model_lower or
+                         display_name_lower in scraped_model_lower or
+                         scraped_model_lower in display_name_lower)
+
+                if match:
+                    response_time = entry.get('response_time_s', float('inf'))
+                    current_intel_index = entry.get('intelligence_index', 0)
+                    if response_time < best_response_time:
+                        best_response_time = response_time
+                        best_intel_index = current_intel_index
+                    elif response_time == best_response_time and current_intel_index > best_intel_index:
+                        best_intel_index = current_intel_index
+            remaining_models_with_perf.append((model_name, count, best_intel_index, best_response_time))
+
+    # 3. Sort remaining models by response time (ascending)
+    remaining_models_with_perf.sort(key=lambda item: item[3]) # Sort by response_time (index 3)
+    print(f"--- Sorted {len(remaining_models_with_perf)} remaining models by response time. ---")
+
+    # 4. Append sorted remaining models to the final list
+    for model_data in remaining_models_with_perf:
+        final_display_list.append(model_data) # Append tuple with perf data
+
+    print(f"--- Final sorted model list contains {len(final_display_list)} models. Top 5 (with perf): {final_display_list[:5]} ---")
+    # Return list including performance data
+    return final_display_list, model_provider_info, provider_class_map
+    # --- End New Sorting Logic ---
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     chats = load_chats()
-    # Get available models dynamically and sorted, plus provider info and class map
+    # Get available models dynamically, sorted by new logic, plus provider info/map
+    # Now includes performance data: [(name, count, intel_idx, resp_time), ...]
     available_models_sorted_list, model_provider_info, provider_class_map = get_available_models_with_provider_counts()
-    available_model_names = {name for name, count in available_models_sorted_list}
+    available_model_names = {name for name, count, _, _ in available_models_sorted_list} # Unpack name only
 
-    # --- Set Default Model ---
-    # Prioritize o3-mini, then o1, then the first in the sorted list, then fallback
-    if "o3-mini" in available_model_names:
-        default_model = "o3-mini"
-    elif "o1" in available_model_names:
-        default_model = "o3-mini"
-    elif available_models_sorted_list:
-        default_model = available_models_sorted_list[0][0]
+    # --- Set Default Model --- 
+    # Set default to the first model in the custom sorted list
+    if available_models_sorted_list:
+        default_model = available_models_sorted_list[0][0] # Index 0 is model name
+        print(f"--- Setting default model to: {default_model} (top of custom sort) ---")
     else:
         default_model = "gpt-3.5-turbo" # Absolute fallback
+        print("--- Warning: No available models found. Setting default to fallback. ---")
     # --- End Default Model ---
 
     # Initialize or load current chat
@@ -349,6 +675,9 @@ def index():
     if current_model not in available_model_names and available_model_names:
         current_model = default_model
         current_chat["model"] = current_model
+
+    # Define web_search_mode with a default for GET requests
+    web_search_mode = 'smart' # Default value
 
     if request.method == 'POST':
         # Handle New Chat action
@@ -377,6 +706,7 @@ def index():
         if selected_model_for_request not in available_model_names and available_model_names:
             selected_model_for_request = default_model
 
+        # Get web_search_mode from form for POST requests, overwriting the default
         web_search_mode = request.form.get('web_search_mode', 'smart') # Default to smart if not provided
         search_results_str = "" # Initialize search results
 
@@ -412,16 +742,47 @@ def index():
         if prompt_to_use:
             # --- Web Search Logic ---
             if web_search_mode == 'on':
-                print(f"--- Web search explicitly enabled for: {prompt_to_use[:50]}... ---")
+                app.logger.info(f"--- Web search explicitly enabled (mode='on') for: {prompt_to_use[:50]}... ---")
                 search_results_str = perform_web_search(prompt_to_use)
             elif web_search_mode == 'smart':
-                # Simple keyword check for smart search trigger
-                smart_search_keywords = ["latest", "recent", "today", "current news", "what happened", "who is"]
-                if any(keyword in prompt_to_use.lower() for keyword in smart_search_keywords):
-                    print(f"--- Smart search triggered for: {prompt_to_use[:50]}... ---")
+                # Enhanced keyword check for smart search trigger
+                smart_search_keywords = [
+                    # Time-based keywords
+                    "latest", "recent", "today", "current", "now", "present", "currently",
+                    # News-style keywords
+                    "current news", "what happened", "breaking news", "update",
+                    # Question patterns that likely need current info
+                    "who is", "what is", "where is", "when did", "how many",
+                    # Position/status keywords
+                    "current president", "current leader", "current status", "current state",
+                    # Event-related keywords
+                    "recent event", "recent development", "recent change", "recent update",
+                    # Version/iteration keywords
+                    "latest version", "current version", "newest", "most recent"
+                ]
+                
+                # Check for keywords in prompt
+                prompt_lower = prompt_to_use.lower()
+                should_search = any(keyword in prompt_lower for keyword in smart_search_keywords)
+                
+                # Additional pattern matching for current information needs
+                if not should_search:
+                    # Check for questions about current positions/status
+                    position_patterns = [
+                        r"who is the current .+",
+                        r"what is the current .+",
+                        r"where is the current .+",
+                        r"when did the current .+",
+                        r"how many current .+"
+                    ]
+                    import re
+                    should_search = any(re.search(pattern, prompt_lower) for pattern in position_patterns)
+                
+                if should_search:
+                    app.logger.info(f"--- Smart search triggered for: {prompt_to_use[:50]}... ---")
                     search_results_str = perform_web_search(prompt_to_use)
                 else:
-                    print(f"--- Smart search not triggered for prompt. ---")
+                    app.logger.info(f"--- Smart search not triggered for prompt. ---")
             # --- End Web Search Logic ---
 
             # Prepare messages for API call (convert full history to API format)
@@ -448,152 +809,565 @@ def index():
                 provider_used_str = "None Attempted"
                 response_content = None
                 attempted_direct_providers = set() # Keep track of direct Cerebras/Groq attempts
+                provider_errors = {} # Dictionary to store errors per provider
+                max_retries = 2  # Maximum number of retries with web search
+                retry_count = 0
+                should_retry = True
 
-                # Helper function to get performance score (lower is better, e.g., response time)
-                def get_scraped_performance_metric(provider_class_name, model_name):
-                    best_score = float('inf')
-                    provider_name_lower = provider_class_name.lower()
-                    model_name_lower = model_name.lower()
-                    # Search cache for matching provider name (case-insensitive) and model name
-                    for entry in PROVIDER_PERFORMANCE_CACHE:
-                        scraped_provider = entry.get('provider_name_scraped', '').lower()
-                        scraped_model = entry.get('model_name_scraped', '').lower()
-                        # Check if the g4f provider name is part of the scraped name, or vice-versa,
-                        # or if it's a known direct match (like Groq)
-                        provider_match = (provider_name_lower in scraped_provider or
-                                          scraped_provider in provider_name_lower or
-                                          (provider_name_lower == 'groq' and scraped_provider == 'groq')) # Add more specific matches if needed
+                while should_retry and retry_count < max_retries:
+                    # Helper function to get performance score (lower is better, e.g., response time)
+                    def get_scraped_performance_metric(provider_identifier, model_name):
+                        # Handles both provider class objects and string identifiers
+                        try:
+                            provider_name_lower = ""
+                            provider_name_for_print = "" # For logging
+                            if isinstance(provider_identifier, str):
+                                # Map string identifiers to searchable names (case-insensitive)
+                                provider_name_for_print = provider_identifier
+                                id_lower = provider_identifier.lower()
+                                if "groq" in id_lower:
+                                    provider_name_lower = "groq"
+                                elif "cerebras" in id_lower:
+                                    provider_name_lower = "cerebras"
+                                elif "chutes" in id_lower:
+                                    provider_name_lower = "chutesai" # Match scraped name if possible
+                                elif "google" in id_lower:
+                                     provider_name_lower = "google" # Match scraped name if possible
+                                else:
+                                    # Try to extract a usable name from g4f provider strings
+                                    if "provider" in id_lower:
+                                        # Extract name between '.' and 'Provider' if possible
+                                        match = re.search(r'\\.(.*?)Provider', provider_identifier)
+                                        if match:
+                                            provider_name_lower = match.group(1).lower()
+                                        else:
+                                            provider_name_lower = id_lower.replace("provider", "").strip()
+                                    else:
+                                        provider_name_lower = id_lower # Fallback to the identifier itself
+                            elif hasattr(provider_identifier, '__name__'):
+                                provider_name_for_print = provider_identifier.__name__
+                                provider_name_lower = provider_identifier.__name__.lower()
+                            else:
+                                print(f"--- Warning: Cannot determine provider name from identifier: {provider_identifier} ---")
+                                return float('inf') # Return worst score if name unknown
 
-                        # Basic model name matching (can be improved)
-                        model_match = (model_name_lower == scraped_model)
+                            if not provider_name_lower:
+                                return float('inf')
 
-                        if provider_match and model_match:
-                            score = entry.get('response_time_s', float('inf'))
-                            if score < best_score:
-                                best_score = score
-                    return best_score
+                            best_score = float('inf')
+                            model_name_lower = model_name.lower()
+                            # Search cache for matching provider name (case-insensitive) and model name
+                            for entry in PROVIDER_PERFORMANCE_CACHE:
+                                scraped_provider = entry.get('provider_name_scraped', '').lower()
+                                scraped_model = entry.get('model_name_scraped', '').lower()
+                                # Check if the determined provider name is part of the scraped name, or vice-versa,
+                                # or if it's a known direct match (like Groq)
+                                provider_match = (provider_name_lower in scraped_provider or
+                                                  scraped_provider in provider_name_lower or
+                                                  (provider_name_lower == 'groq' and scraped_provider == 'groq') or
+                                                  (provider_name_lower == 'google' and scraped_provider == 'google') or
+                                                  (provider_name_lower == 'cerebras' and scraped_provider == 'cerebras'))
 
-                # Step 1: Try Direct Cerebras
-                if selected_model_for_request in CEREBRAS_TARGET_MODELS and CEREBRAS_API_KEY:
-                    provider_name_for_attempt = "Cerebras (Direct)"
-                    attempted_direct_providers.add("cerebras")
-                    try:
-                        print(f"--- Attempting provider: {provider_name_for_attempt} ---")
-                        # Assuming g4f can handle direct provider specification or specific args
-                        current_args = {"api_key": CEREBRAS_API_KEY, "model": selected_model_for_request, "messages": api_messages, "provider": "Cerebras"} # Hypothetical
-                        response_content = ChatCompletion.create(**current_args)
-                        provider_used_str = provider_name_for_attempt
-                        print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
-                    except Exception as e:
-                        print(f"--- Provider {provider_name_for_attempt} failed: {e} ---")
-                        response_content = None # Ensure reset on failure
+                                # Basic model name matching (can be improved)
+                                # Allow partial match for models like llama-4-scout vs meta-llama/llama-4-scout...
+                                model_match = (model_name_lower == scraped_model or
+                                               model_name_lower in scraped_model or
+                                               scraped_model in model_name_lower)
 
-                # Step 2: Try Direct Groq (if Cerebras not attempted or failed)
-                if response_content is None and selected_model_for_request in GROQ_TARGET_MODELS and GROQ_API_KEY and GROQ_PROVIDER_CLASS:
-                    provider_name_for_attempt = "Groq (Direct)"
-                    attempted_direct_providers.add("groq")
-                    groq_model_name = GROQ_MODEL_NAME_MAP.get(selected_model_for_request, selected_model_for_request)
-                    current_args = {"api_key": GROQ_API_KEY, "provider": GROQ_PROVIDER_CLASS, "model": groq_model_name, "messages": api_messages}
-                    try:
-                        print(f"--- Attempting provider: {provider_name_for_attempt} ---")
-                        response_content = ChatCompletion.create(**current_args)
-                        provider_used_str = provider_name_for_attempt
-                        print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
-                    except Exception as e:
-                        print(f"--- Provider {provider_name_for_attempt} failed: {e} ---")
-                        response_content = None # Ensure reset on failure
+                                if provider_match and model_match:
+                                    score = entry.get('response_time_s', float('inf'))
+                                    if score < best_score:
+                                        best_score = score
+                            # Return None if no match found, or the best score
+                            final_score = best_score if best_score != float('inf') else float('inf')
+                            # print(f"--- Perf Metric: Provider='{provider_name_for_print}' ({provider_name_lower}), Model='{model_name}', Score={final_score} ---")
+                            return final_score
+                        except Exception as e:
+                            print(f"Error getting performance metric for {provider_identifier}, {model_name}: {e}")
+                            return float('inf') # Return worst score on error
 
-                # Step 3: Try g4f Providers (Sorted by Scraped Performance)
-                if response_content is None:
-                    default_providers = model_provider_info.get(selected_model_for_request, [])
-                    if not default_providers:
-                         print(f"--- No default g4f providers found for model {selected_model_for_request} ---")
-                    else:
-                        # Sort providers based on scraped performance (lower response time is better)
-                        default_providers_sorted = sorted(
-                            default_providers,
-                            key=lambda p_class: get_scraped_performance_metric(p_class.__name__, selected_model_for_request)
-                        )
-                        print(f"--- g4f providers sorted by performance: {[(p.__name__, get_scraped_performance_metric(p.__name__, selected_model_for_request)) for p in default_providers_sorted]} ---")
+                    # Define model mapping (user-facing -> provider-specific)
+                    MODEL_PROVIDER_MAP = {
+                        "llama-4-scout": {
+                             # Map to the actual ID Groq reported
+                            "groq": "meta-llama/llama-4-scout-17b-16e-instruct",
+                             # Cerebras doesn't seem to list it based on logs, keep None
+                            "cerebras": None
+                        },
+                        # Add other mappings if needed - example:
+                        # "some-other-model": { "groq": "actual-groq-id", "cerebras": "actual-cerebras-id" }
+                    }
+                    # Import re for the helper function
+                    import re
 
-                        for provider_class in default_providers_sorted:
-                            provider_name_lower = provider_class.__name__.lower()
-                            is_groq = provider_class == GROQ_PROVIDER_CLASS
-                            is_cerebras = SCRAPED_PROVIDER_NAME_CEREBRAS.lower() in provider_name_lower
+                    # Function to get the provider-specific model ID
+                    def get_provider_model_id(user_model_name, provider_key):
+                        provider_key_lower = provider_key.lower()
+                        mapping = MODEL_PROVIDER_MAP.get(user_model_name)
+                        if mapping:
+                            # Check direct key match first (e.g., 'groq')
+                            if provider_key_lower in mapping:
+                                return mapping[provider_key_lower]
+                            # Check partial match for strings like 'GroqAPIProvider'
+                            for map_key, model_id in mapping.items():
+                                if map_key in provider_key_lower:
+                                    return model_id
+                        # If no mapping or provider not found in map, return original name
+                        return user_model_name
 
-                            # Prepare base arguments
-                            current_args = {"provider": provider_class, "model": selected_model_for_request, "messages": api_messages}
-                            provider_name_for_attempt = f"{provider_class.__name__} (g4f List)"
+                    # Step 1: Try Direct Cerebras
+                    cerebras_model_id = get_provider_model_id(selected_model_for_request, "cerebras")
+                    # Try if the original model is in targets OR if a mapping exists (and isn't None)
+                    should_try_cerebras = (selected_model_for_request in CEREBRAS_TARGET_MODELS or (cerebras_model_id is not None and cerebras_model_id != selected_model_for_request)) and CEREBRAS_API_KEY
 
-                            # Internal Priority Check: Add API key if it's Groq/Cerebras and not attempted directly
-                            if is_groq and GROQ_API_KEY and "groq" not in attempted_direct_providers:
-                                current_args["api_key"] = GROQ_API_KEY
-                                provider_name_for_attempt = f"{provider_class.__name__} (g4f Internal Priority)"
-                                print(f"--- Applying internal priority for Groq (g4f list) ---")
-                            elif is_cerebras and CEREBRAS_API_KEY and "cerebras" not in attempted_direct_providers:
-                                current_args["api_key"] = CEREBRAS_API_KEY
-                                provider_name_for_attempt = f"{provider_class.__name__} (g4f Internal Priority)"
-                                print(f"--- Applying internal priority for Cerebras (g4f list) ---")
+                    if should_try_cerebras:
+                        provider_name_for_attempt = "Cerebras (Direct API)"
+                        attempted_direct_providers.add("cerebras")
+                        cerebras_provider_cls = provider_class_map.get("cerebras")
+                        # Use the mapped ID if it exists and is not None, otherwise use the original selection
+                        model_to_use_cerebras = cerebras_model_id if cerebras_model_id else selected_model_for_request
 
-                            # Attempt the provider
+                        if cerebras_provider_cls and model_to_use_cerebras:
+                            current_args = {
+                                "model": model_to_use_cerebras, # Use mapped or original ID
+                                "messages": api_messages,
+                                "provider": cerebras_provider_cls,
+                                "api_key": CEREBRAS_API_KEY
+                            }
                             try:
-                                print(f"--- Attempting provider: {provider_name_for_attempt} ---")
+                                print(f"--- Attempting Priority Provider: {provider_name_for_attempt} ({model_to_use_cerebras}) ---")
                                 response_content = ChatCompletion.create(**current_args)
-                                provider_used_str = provider_name_for_attempt
-                                print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
-                                break # Exit loop on first success
+                                # Corrected error handling block:
+                                if response_content and response_content.strip():
+                                    content_str = response_content.strip()
+                                    low = content_str.lower()
+                                    if not (low.startswith("error:") or low.startswith("you have reached") or "challenge error" in low or "rate limit" in low):
+                                        provider_used_str = provider_name_for_attempt
+                                        print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
+                                    else:
+                                        error_msg = f"Provider {provider_name_for_attempt} returned error string: {content_str}"
+                                        print(f"--- {error_msg} ---")
+                                        provider_errors[provider_name_for_attempt] = content_str
+                                        response_content = None
+                                else:
+                                    error_msg = f"Provider {provider_name_for_attempt} returned empty response."
+                                    print(f"--- {error_msg} ---")
+                                    provider_errors[provider_name_for_attempt] = "Returned empty response"
+                                    response_content = None
                             except Exception as e:
-                                print(f"--- Provider {provider_name_for_attempt} failed: {e} ---")
+                                error_msg = f"Provider {provider_name_for_attempt} failed: {e}"
+                                print(f"--- {error_msg} ---")
+                                provider_errors[provider_name_for_attempt] = str(e)
+                                response_content = None
+                        else:
+                             # Corrected print statement:
+                             print(f"--- Skipping Cerebras: Provider class found: {cerebras_provider_cls is not None}, Model ID to use: {model_to_use_cerebras} ---")
+                             provider_errors[provider_name_for_attempt] = f"Provider class or model ID missing for Cerebras ({selected_model_for_request})"
+                             response_content = None
+
+                    # Step 2: Try Direct Groq (if Cerebras failed or wasn't applicable)
+                    groq_model_id = get_provider_model_id(selected_model_for_request, "groq")
+                    # Try if the mapped ID is in cache OR the original selection is in cache
+                    should_try_groq = ( (groq_model_id is not None and groq_model_id in GROQ_MODELS_CACHE) or selected_model_for_request in GROQ_MODELS_CACHE ) and GROQ_API_KEY
+
+                    if response_content is None and should_try_groq:
+                        provider_name_for_attempt = "Groq (Direct API)"
+                        attempted_direct_providers.add("groq")
+                        # Use the mapped ID if it exists and is in the cache, otherwise fallback to original selection if that's in cache
+                        model_to_use_groq = groq_model_id if (groq_model_id is not None and groq_model_id in GROQ_MODELS_CACHE) else selected_model_for_request
+
+                        if GROQ_PROVIDER_CLASS and model_to_use_groq in GROQ_MODELS_CACHE: # Double check model is valid for Groq
+                            current_args = {"api_key": GROQ_API_KEY, "provider": GROQ_PROVIDER_CLASS, "model": model_to_use_groq, "messages": api_messages}
+                            try:
+                                print(f"--- Attempting Priority Provider: {provider_name_for_attempt} ({model_to_use_groq}) via g4f ---")
+                                response_content = ChatCompletion.create(**current_args)
+                                # Corrected error handling block:
+                                if response_content and response_content.strip():
+                                    content_str = response_content.strip()
+                                    low = content_str.lower()
+                                    if not (low.startswith("error:") or low.startswith("you have reached") or "challenge error" in low or "rate limit" in low):
+                                        provider_used_str = provider_name_for_attempt
+                                        print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
+                                    else:
+                                        error_msg = f"Provider {provider_name_for_attempt} returned error string: {content_str}"
+                                        print(f"--- {error_msg} ---")
+                                        provider_errors[provider_name_for_attempt] = content_str
+                                        response_content = None
+                                else:
+                                    error_msg = f"Provider {provider_name_for_attempt} returned empty response."
+                                    print(f"--- {error_msg} ---")
+                                    provider_errors[provider_name_for_attempt] = "Returned empty response"
+                                    response_content = None
+                            except Exception as e:
+                                error_msg = f"Provider {provider_name_for_attempt} failed: {e}"
+                                print(f"--- {error_msg} ---")
+                                provider_errors[provider_name_for_attempt] = str(e)
                                 response_content = None # Ensure reset before next iteration
+                        else:
+                            error_reason = "Groq provider class not imported" if not GROQ_PROVIDER_CLASS else f"Model '{model_to_use_groq}' not found in Groq cache"
+                            print(f"--- Skipping Groq (Direct API via g4f): {error_reason}. ---")
+                            provider_errors[provider_name_for_attempt] = error_reason
+                            response_content = None
 
-                # Check final outcome after all attempts
-                if response_content is None and provider_used_str == "None Attempted":
-                     final_error_message = f"Error: No suitable providers found or attempted for model {selected_model_for_request}."
-                     provider_used_str = "None Found/Attempted"
-                elif response_content is None:
-                     final_error_message = f"Error: All attempted providers failed for model {selected_model_for_request}."
-                     provider_used_str = "All Failed"
-                # --- End Provider Selection ---
+                    # Step 3: Try Google AI Studio
+                    # Use the corrected names from GOOGLE_TARGET_MODELS
+                    if response_content is None and selected_model_for_request in GOOGLE_TARGET_MODELS and GOOGLE_API_KEY:
+                        provider_name_for_attempt = "Google AI Studio"
+                        attempted_direct_providers.add("google") # Mark as attempted
+                        try:
+                            print(f"--- Attempting Priority Provider: {provider_name_for_attempt} with model: {selected_model_for_request} ---")
+                            # Import Google AI library only when needed
+                            import google.generativeai as genai
+                            genai.configure(api_key=GOOGLE_API_KEY)
 
-            # Process successful response or final error
-            if response_content is not None:
-                # Handle regeneration: remove previous AI message if needed
+                            # Use the model name directly from GOOGLE_TARGET_MODELS
+                            google_model_name = selected_model_for_request
+                            print(f"--- Using Google AI Model ID: {google_model_name} ---") # Log the ID being used
+                            model = genai.GenerativeModel(google_model_name)
+
+                            # Convert message history to Google AI format
+                            generation_config = genai.types.GenerationConfig(
+                                max_output_tokens=8192, # Example config
+                                temperature=0.9       # Example config
+                            )
+                            google_messages = []
+                            system_instruction_parts = None # Store parts of system instruction
+                            for msg in api_messages:
+                                role = 'user' if msg['role'] == 'user' else 'model'
+                                if msg['role'] == 'system':
+                                    # Store system instruction content but don't add to list yet
+                                    system_instruction_parts = [genai.types.Part(text=msg['content'])]
+                                    print("--- Found system instruction for Google AI ---")
+                                    continue
+                                google_messages.append({'role': role, 'parts': [msg['content']]})
+
+                            # Prepend system instruction if found
+                            if system_instruction_parts:
+                                print("--- Prepending system instruction to Google messages ---")
+                                # Format according to Content structure if needed by the specific model/library version
+                                # [{role: "system"...}] might not be valid, depends on API.
+                                # Often, just the content parts are expected first, implicitly as system.
+                                # Let's try prepending a Content object with user role (as per some examples) or just parts
+                                # Safer approach: Prepend as a separate Content object if library supports it, otherwise
+                                # merge with first user message or just pass parts. Let's just pass parts first.
+                                # google_messages.insert(0, genai.types.Content(parts=system_instruction_parts, role="system")) # May not be valid
+                                # Alternative: Prepend as the first item without role (implicit system?)
+                                # google_messages.insert(0, {'parts': system_instruction_parts}) # Might work?
+                                # Simplest: Just pass the parts list to the model constructor? No, needs history.
+                                # Let's try combining with the first user message or sending it separately if possible.
+                                # For now, let's stick to the documented way for most models: list of dicts.
+                                # We will NOT pass system_instruction kwarg anymore.
+                                # If system message needs special handling, requires more specific logic per model/API.
+
+                                # Option: Add as first 'user' message (might confuse model)
+                                # google_messages.insert(0, {'role': 'user', 'parts': system_instruction_parts})
+
+                                # Option: Add as first 'model' message (less ideal)
+                                # google_messages.insert(0, {'role': 'model', 'parts': system_instruction_parts})
+
+                                # Let's assume for now the API handles a simple list and ignore system message if kwarg fails.
+                                print("--- Note: System instruction kwarg failed. System message may be ignored by Google AI. ---")
+
+                            # Remove last 'model' message if it exists (common if regenerating)
+                            if google_messages and google_messages[-1]['role'] == 'model':
+                                print("--- Removing last 'model' message before sending to Google AI ---")
+                                google_messages.pop()
+
+                            if not any(m['role'] == 'user' for m in google_messages):
+                                # This code *should* be inside the 'if not any' block
+                                print("--- Error: No user messages found for Google AI after processing. Skipping. ---")
+                                provider_errors[provider_name_for_attempt] = "No user messages to send"
+                                response_content = None
+                            else:
+                                # This code *should* be inside the 'else' block
+                                print(f"--- Sending {len(google_messages)} messages to Google AI ({google_model_name}) ---")
+                                # REMOVED system_instruction kwarg
+                                response = model.generate_content(
+                                    google_messages,
+                                    generation_config=generation_config
+                                )
+                                # Check for response content safely
+                                if response and hasattr(response, 'text') and response.text:
+                                    response_content = response.text.strip()
+                                    if response_content:
+                                        provider_used_str = provider_name_for_attempt
+                                        print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
+                                    else:
+                                        error_msg = f"Provider {provider_name_for_attempt} returned empty response text."
+                                        print(f"--- {error_msg} ---")
+                                        provider_errors[provider_name_for_attempt] = "Returned empty response text"
+                                        response_content = None
+                                else:
+                                    error_msg = f"Provider {provider_name_for_attempt} returned unexpected or empty response structure: {response}"
+                                    print(f"--- {error_msg} ---")
+                                    provider_errors[provider_name_for_attempt] = f"Unexpected/empty response structure: {str(response)[:100]}"
+                                    response_content = None
+
+                        except ImportError:
+                             print("--- Google AI Studio library not installed. Skipping. Run: pip install google-generativeai ---")
+                             provider_errors[provider_name_for_attempt] = "Library not installed"
+                             response_content = None
+                        except Exception as e:
+                            # Catch specific Google API errors if possible
+                            error_msg = f"Provider {provider_name_for_attempt} failed: {e}"
+                            print(f"--- {error_msg} ---")
+                            provider_errors[provider_name_for_attempt] = str(e)
+                            response_content = None
+
+                    # Step 4: Try Chutes AI (if previous steps failed)
+                    # Check if the selected model is potentially available via Chutes and API key exists
+                    chutes_model_to_try = None
+                    if selected_model_for_request in CHUTES_MODELS_CACHE:
+                        chutes_model_to_try = selected_model_for_request
+                    elif selected_model_for_request == "deepseek-v3" and "deepseek-ai/DeepSeek-V3-0324" in CHUTES_MODELS_CACHE:
+                        # Explicit mapping if user selects 'deepseek-v3' but Chutes has the specific one
+                        chutes_model_to_try = "deepseek-ai/DeepSeek-V3-0324"
+                        print(f"--- Mapping selected model '{selected_model_for_request}' to '{chutes_model_to_try}' for Chutes AI ---")
+
+                    if response_content is None and chutes_model_to_try and CHUTES_API_KEY:
+                        provider_name_for_attempt = "Chutes AI"
+                        attempted_direct_providers.add("chutes") # Mark as attempted
+                        try:
+                            print(f"--- Attempting Priority Provider: {provider_name_for_attempt} ({chutes_model_to_try}) ---")
+
+                            async def call_chutes_api():
+                                """Helper async function to call Chutes API."""
+                                nonlocal response_content, provider_used_str # Allow modification of outer scope variables
+                                chutes_headers = {
+                                    "Authorization": f"Bearer {CHUTES_API_KEY}",
+                                    "Content-Type": "application/json"
+                                }
+                                # Construct Chutes API body
+                                chutes_body = {
+                                    "model": chutes_model_to_try, # Use the determined model name
+                                    "messages": api_messages, # Assuming Chutes uses OpenAI message format
+                                    "stream": False, # Request non-streaming response for simplicity here
+                                    # Add other parameters like max_tokens, temperature if needed
+                                    # "max_tokens": 1024,
+                                    # "temperature": 0.7
+                                }
+                                chutes_url = f"{CHUTES_API_URL}/chat/completions"
+
+                                async with aiohttp.ClientSession() as session:
+                                    async with session.post(chutes_url, headers=chutes_headers, json=chutes_body, timeout=30) as response:
+                                        if response.status == 200:
+                                            data = await response.json()
+                                            # Extract content (adjust based on actual Chutes response structure)
+                                            # Assuming response like: {'choices': [{'message': {'content': '...'}}]}
+                                            if 'choices' in data and data['choices'] and 'message' in data['choices'][0] and 'content' in data['choices'][0]['message']:
+                                                extracted_content = data['choices'][0]['message']['content']
+                                                if extracted_content and extracted_content.strip():
+                                                    response_content = extracted_content.strip()
+                                                    provider_used_str = provider_name_for_attempt
+                                                    print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
+                                                    return True # Indicate success
+                                                else:
+                                                    print(f"--- Provider {provider_name_for_attempt} returned empty content. ---")
+                                                    provider_errors[provider_name_for_attempt] = "Returned empty content"
+                                            else:
+                                                print(f"--- Provider {provider_name_for_attempt} returned unexpected JSON structure: {data} ---")
+                                                provider_errors[provider_name_for_attempt] = f"Unexpected JSON structure: {str(data)[:100]}"
+                                        else:
+                                            error_text = await response.text()
+                                            print(f"--- Provider {provider_name_for_attempt} failed with status {response.status}: {error_text[:200]} ---")
+                                            provider_errors[provider_name_for_attempt] = f"Status {response.status}: {error_text[:100]}"
+                                return False # Indicate failure
+
+                            # Run the async helper function in the current event loop if possible,
+                            # or create a new one if needed (asyncio.run does this).
+                            try:
+                                # If Flask is running with an async framework (like Quart or uvicorn with loop='asyncio'),
+                                # we might be able to await directly or use asyncio.create_task.
+                                # However, standard Flask runs synchronously. asyncio.run() is a common way
+                                # to bridge sync/async but has implications (starts/stops loop).
+                                # Consider loop = asyncio.get_event_loop(); loop.run_until_complete(call_chutes_api())
+                                # if managing the loop explicitly.
+                                if not asyncio.run(call_chutes_api()):
+                                    # Explicitly set response_content to None if call_chutes_api returned False (failure)
+                                    response_content = None
+                            except RuntimeError as e:
+                                 if "cannot run nested event loops" in str(e):
+                                     # This happens if Flask/Gunicorn/Uvicorn is already running an event loop.
+                                     # Try running in the existing loop.
+                                     print("--- Detected existing event loop. Running Chutes call within it. ---")
+                                     loop = asyncio.get_event_loop()
+                                     if not loop.run_until_complete(call_chutes_api()):
+                                         response_content = None
+                                 else:
+                                     raise # Re-raise other runtime errors
+                        except Exception as e:
+                            # Catch errors during the asyncio.run or the API call itself
+                            error_msg = f"Provider {provider_name_for_attempt} failed: {e}"
+                            print(f"--- {error_msg} ---")
+                            provider_errors[provider_name_for_attempt] = str(e)
+                            response_content = None # Ensure reset on failure
+
+                    # Step 5: Try g4f Providers (Sorted by Scraped Performance or Default)
+                    if response_content is None:
+                        # Get the list of potential providers (classes or strings)
+                        potential_providers = model_provider_info.get(selected_model_for_request, [])
+
+                        if not potential_providers:
+                            # ... (existing fallback logic) ...
+                            print(f"--- No default g4f providers found for model {selected_model_for_request}. Falling back to generic g4f provider. ---")
+                            # ...
+                        else:
+                            # Create list of (provider, score) tuples using the updated metric function
+                            scored_providers = []
+                            for p_id in potential_providers:
+                                # Skip providers already tried directly
+                                provider_key = ""
+                                if isinstance(p_id, str):
+                                     if "groq" in p_id.lower() and "groq" in attempted_direct_providers: continue
+                                     if "cerebras" in p_id.lower() and "cerebras" in attempted_direct_providers: continue
+                                     if "google" in p_id.lower() and "google" in attempted_direct_providers: continue
+                                     if "chutes" in p_id.lower() and "chutes" in attempted_direct_providers: continue
+                                elif hasattr(p_id, '__name__'):
+                                     p_name_lower = p_id.__name__.lower()
+                                     if "groq" in p_name_lower and "groq" in attempted_direct_providers: continue
+                                     if "cerebras" in p_name_lower and "cerebras" in attempted_direct_providers: continue
+                                     # Add others if needed
+                                else:
+                                     continue # Skip unknown identifier types
+
+                                score = get_scraped_performance_metric(p_id, selected_model_for_request)
+                                scored_providers.append((p_id, score))
+
+                            # Sort by score (lower response time is better, float('inf') places unknowns last)
+                            scored_providers.sort(key=lambda x: x[1])
+
+                            print(f"--- g4f providers sorted by performance: {[( (p[0].__name__ if hasattr(p[0], '__name__') else p[0]), p[1]) for p in scored_providers]} ---")
+
+                            # Iterate through the sorted providers
+                            for provider_identifier, score in scored_providers:
+                                # Determine provider class and name for attempt
+                                provider_class_to_use = None
+                                provider_name_for_attempt = "Unknown"
+                                api_key_to_use = None # Reset API key
+
+                                if isinstance(provider_identifier, str):
+                                    # This case shouldn't happen often for g4f list, primarily for direct mapped ones
+                                    # But if it does, we might need to map string back to class object if possible
+                                    # For now, we mainly expect class objects here from model_provider_info
+                                    print(f"--- Warning: Skipping string identifier '{provider_identifier}' in g4f sorted list. ---")
+                                    continue
+                                elif hasattr(provider_identifier, '__name__'):
+                                    provider_class_to_use = provider_identifier
+                                    provider_name_for_attempt = f"{provider_class_to_use.__name__} (g4f List, Perf: {score})"
+                                else:
+                                    print(f"--- Warning: Skipping unknown identifier '{provider_identifier}' in g4f sorted list. ---")
+                                    continue
+
+                                # Get the correct model ID for this specific provider
+                                model_id_for_g4f_attempt = get_provider_model_id(selected_model_for_request, provider_class_to_use.__name__)
+
+                                current_args = {"provider": provider_class_to_use, "model": model_id_for_g4f_attempt, "messages": api_messages}
+
+                                # Add API keys if required by the specific g4f provider (Optional - g4f might handle some internally)
+                                # Example: if provider_class_to_use == SomeProviderRequiringKey: current_args["api_key"] = SOME_KEY
+
+                                try:
+                                    print(f"--- Attempting provider: {provider_name_for_attempt} with model {model_id_for_g4f_attempt} ---")
+                                    response_content = ChatCompletion.create(**current_args)
+                                    # ... (rest of try/except/check block remains the same) ...
+                                    if response_content and response_content.strip():
+                                        content_str = response_content.strip()
+                                        low = content_str.lower()
+                                        # Use a simpler error check for g4f providers
+                                        if not low.startswith("error:") and "unable to fetch" not in low and "invalid key" not in low:
+                                            provider_used_str = provider_name_for_attempt # Use the detailed name
+                                            print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
+                                            break # Exit loop on first success
+                                        else:
+                                            error_msg = f"Provider {provider_name_for_attempt} returned error string: {content_str}"
+                                            print(f"--- {error_msg} ---")
+                                            provider_errors[provider_name_for_attempt] = content_str
+                                            response_content = None
+                                    else:
+                                        error_msg = f"Provider {provider_name_for_attempt} returned empty response."
+                                        print(f"--- {error_msg} ---")
+                                        provider_errors[provider_name_for_attempt] = "Returned empty response"
+                                        response_content = None
+                                except Exception as e:
+                                    error_msg = f"Provider {provider_name_for_attempt} failed: {e}"
+                                    print(f"--- {error_msg} ---")
+                                    provider_errors[provider_name_for_attempt] = str(e)
+                                    response_content = None # Ensure reset before next iteration
+
+                    # Check final outcome after all attempts
+                    if response_content is None and provider_used_str == "None Attempted":
+                         final_error_message = f"Error: No suitable providers found or attempted for model {selected_model_for_request}."
+                         provider_used_str = "None Found/Attempted"
+                    elif response_content is None:
+                         error_details = "; ".join([f"{p}: {e}" for p, e in provider_errors.items()])
+                         final_error_message = f"Error: All attempted providers failed for model {selected_model_for_request}. Details: {error_details}"
+                         provider_used_str = "All Failed"
+                    # --- End Provider Selection ---
+
+                    # After getting response_content, check if it indicates outdated information
+                    if response_content and retry_count < max_retries - 1:
+                        response_lower = response_content.lower()
+                        outdated_indicators = [
+                            "my knowledge cutoff",
+                            "my training data only goes up to",
+                            "i don't have information beyond",
+                            "i don't have access to information after",
+                            "i don't have real-time information",
+                            "i don't have current information",
+                            "i don't have the latest information",
+                            "i don't have up-to-date information"
+                        ]
+                        
+                        if any(indicator in response_lower for indicator in outdated_indicators):
+                            print(f"--- LLM response indicates outdated information, retrying with web search (attempt {retry_count + 1}) ---")
+                            search_results_str = perform_web_search(prompt_to_use)
+                            if search_results_str:
+                                # Modify the last user message content with web search results
+                                if api_messages and api_messages[-1]["role"] == "user":
+                                    original_prompt_content = api_messages[-1]["content"]
+                                    api_messages[-1]["content"] = f"Web Search Results:\n{search_results_str}\n\nOriginal User Prompt:\n{original_prompt_content}"
+                                else:
+                                    api_messages.insert(0, {"role": "system", "content": f"Context from web search:\n{search_results_str}"})
+                            retry_count += 1
+                            should_retry = True
+                        else:
+                            should_retry = False
+                    else:
+                        should_retry = False
+
+                # Process successful response or final error
+                # Handle regeneration: remove previous AI message FIRST if needed
                 if remove_last_ai_msg_from_actual_history:
                     if current_chat["history"] and current_chat["history"][-1]["role"] == "assistant":
                         print("--- Removing previous assistant message for regeneration ---")
                         current_chat["history"].pop()
-                # Add user prompt to actual history if it wasn't a regeneration
-                if not is_regeneration:
-                    current_chat["history"].append({"role": "user", "content": prompt_from_input, "timestamp": datetime.now().isoformat()}) # Use original prompt here
-                # Add the successful assistant response
-                current_chat["history"].append({"role": "assistant", "content": response_content, "model": selected_model_for_request, "provider": provider_used_str, "timestamp": datetime.now().isoformat()})
-                # Auto-name chat if it's new
-                if current_chat.get("name") == "New Chat" and any(msg["role"] == "user" for msg in current_chat["history"]):
-                     first_user_prompt = next((msg["content"] for msg in current_chat["history"] if msg["role"] == "user"), None)
-                     if first_user_prompt:
-                         clean_prompt = ''.join(c for c in ' '.join(first_user_prompt.split()[:6]) if c.isalnum() or c.isspace()).strip()
-                         response_timestamp = current_chat["history"][-1].get("timestamp") if current_chat["history"] else datetime.now().isoformat()
-                         timestamp_str = datetime.fromisoformat(response_timestamp).strftime("%b %d, %I:%M%p")
-                         chat_name = f"{clean_prompt[:30]}... ({timestamp_str})" if clean_prompt else f"Chat ({timestamp_str})"
-                         current_chat["name"] = chat_name
-            elif final_error_message:
-                 # Add user prompt to history even if API failed (unless regenerating)
-                 if not is_regeneration:
-                     current_chat["history"].append({"role": "user", "content": prompt_from_input, "timestamp": datetime.now().isoformat()}) # Use original prompt
-                 # Add error message as assistant response
-                 current_chat["history"].append({"role": "assistant", "content": final_error_message, "model": selected_model_for_request, "provider": provider_used_str, "timestamp": datetime.now().isoformat()})
 
-            save_chats(chats)
-            return redirect(url_for('index'))
-        # Handle case where regeneration was requested but no prompt could be determined
-        elif is_regeneration:
-            print("--- Regeneration requested but no previous user prompt found. ---")
-            return redirect(url_for('index'))
-        # Handle empty prompt submission (do nothing, just reload)
-        else:
-            print("--- Empty prompt submitted. ---")
-            return redirect(url_for('index'))
+                if response_content is not None:
+                    # Add user prompt to actual history if it wasn't a regeneration
+                    if not is_regeneration:
+                        current_chat["history"].append({"role": "user", "content": prompt_from_input, "timestamp": datetime.now().isoformat()}) # Use original prompt here
+                    # Add the successful assistant response
+                    current_chat["history"].append({"role": "assistant", "content": response_content, "model": selected_model_for_request, "provider": provider_used_str, "timestamp": datetime.now().isoformat()})
+                    # Auto-name chat if it's new
+                    if current_chat.get("name") == "New Chat" and any(msg["role"] == "user" for msg in current_chat["history"]):
+                         first_user_prompt = next((msg["content"] for msg in current_chat["history"] if msg["role"] == "user"), None)
+                         if first_user_prompt:
+                             clean_prompt = ''.join(c for c in ' '.join(first_user_prompt.split()[:6]) if c.isalnum() or c.isspace()).strip()
+                             response_timestamp = current_chat["history"][-1].get("timestamp") if current_chat["history"] else datetime.now().isoformat()
+                             timestamp_str = datetime.fromisoformat(response_timestamp).strftime("%b %d, %I:%M%p")
+                             chat_name = f"{clean_prompt[:30]}... ({timestamp_str})" if clean_prompt else f"Chat ({timestamp_str})"
+                             current_chat["name"] = chat_name
+                elif final_error_message:
+                     # Add user prompt to history only if it was a NEW prompt that failed
+                     # (Don't re-add the user prompt if regeneration failed)
+                     if not is_regeneration:
+                         current_chat["history"].append({"role": "user", "content": prompt_from_input, "timestamp": datetime.now().isoformat()}) # Use original prompt
+                     # Add error message as assistant response
+                     current_chat["history"].append({"role": "assistant", "content": final_error_message, "model": selected_model_for_request, "provider": provider_used_str, "timestamp": datetime.now().isoformat()})
 
+        # Save chat history after processing response/error
+        save_chats(chats)
+        return redirect(url_for('index')) # Redirect after processing POST
 
     # --- Prepare data for rendering the page (GET request or after POST redirect) ---
     history_html = ""
@@ -613,16 +1387,34 @@ def index():
                              <div style="white-space: pre-wrap; word-wrap: break-word;">{content_display}</div>
                            </div>'''
 
-    model_options_html = ''.join([f'<option value="{model_name}" {"selected" if model_name == current_model else ""}>{model_name} ({provider_count} providers)</option>' for model_name, provider_count in available_models_sorted_list])
+    # Use MODEL_DISPLAY_NAME_MAP and performance data for dropdown text
+    model_options_html = ''
+    for model_name, provider_count, intel_index, resp_time in available_models_sorted_list:
+        display_name = MODEL_DISPLAY_NAME_MAP.get(model_name, model_name) # Use mapped name or fallback to original
+        selected_attr = "selected" if model_name == current_model else ""
+        # Format performance string, handle missing data (resp_time == inf)
+        if resp_time != float('inf') and intel_index > 0:
+            perf_str = f"({intel_index}, {resp_time:.2f}s)"
+        elif resp_time != float('inf'):
+             perf_str = f"(Intel N/A, {resp_time:.2f}s)"
+        else:
+            perf_str = "(Perf N/A)"
+        model_options_html += f'<option value="{model_name}" {selected_attr}>{display_name} {perf_str}</option>'
 
     # Determine checked state for web search (default to smart)
-    # This assumes no session persistence for the mode yet.
+    # Use the web_search_mode defined earlier for GET requests
     web_search_html = f'''
         <div style="margin-bottom: 10px;">
             <label style="margin-right: 10px; font-weight: bold;">Web Search:</label>
-            <input type="radio" id="ws_off" name="web_search_mode" value="off"> <label for="ws_off" style="margin-right: 5px;">Off</label>
-            <input type="radio" id="ws_on" name="web_search_mode" value="on"> <label for="ws_on" style="margin-right: 5px;">On</label>
-            <input type="radio" id="ws_smart" name="web_search_mode" value="smart" checked> <label for="ws_smart">Smart</label>
+            <label style="margin-right: 15px;">
+                <input type="radio" name="web_search_mode" value="off" {'checked' if web_search_mode == 'off' else ''}> Off
+            </label>
+            <label style="margin-right: 15px;">
+                <input type="radio" name="web_search_mode" value="smart" {'checked' if web_search_mode == 'smart' else ''}> Smart
+            </label>
+            <label>
+                <input type="radio" name="web_search_mode" value="on" {'checked' if web_search_mode == 'on' else ''}> On
+            </label>
         </div>
     '''
 
@@ -734,21 +1526,53 @@ def load_chat(chat_id):
         return redirect(url_for('saved_chats'))
 
 if __name__ == '__main__':
+    # --- Fetch Chutes Models (Async) ---
+    try:
+        print("--- Initializing: Fetching Chutes AI models... ---")
+        # Run the async function to populate CHUTES_MODELS_CACHE
+        asyncio.run(fetch_chutes_models())
+        print(f"--- Chutes models fetched: {len(CHUTES_MODELS_CACHE)} ---")
+    except Exception as e:
+        print(f"--- Error running fetch_chutes_models at startup: {e} ---")
+        CHUTES_MODELS_CACHE = [] # Ensure it's empty on error
+    # --- End Chutes Fetch ---
+
+    # --- Fetch Groq Models (Async) ---
+    try:
+        print("--- Initializing: Fetching Groq API models... ---")
+        asyncio.run(fetch_groq_models())
+        print(f"--- Groq models fetched: {len(GROQ_MODELS_CACHE)} ---")
+    except Exception as e:
+        print(f"--- Error running fetch_groq_models at startup: {e} ---")
+        GROQ_MODELS_CACHE = [] # Ensure it's empty on error
+    # --- End Groq Fetch ---
+
     # --- Load or Scrape performance data on startup ---
-    print("--- Initializing: Loading/Scraping provider performance data ---")
+    print("--- [STARTUP] Entering performance data handling ---") # <-- ADDED
+    print(f"--- [STARTUP] Checking for CSV at: {PERFORMANCE_CSV_PATH} ---") # <-- ADDED
     PROVIDER_PERFORMANCE_CACHE = load_performance_from_csv(PERFORMANCE_CSV_PATH)
+    print(f"--- [STARTUP] load_performance_from_csv returned cache size: {len(PROVIDER_PERFORMANCE_CACHE)} ---") # <-- ADDED
+
     if not PROVIDER_PERFORMANCE_CACHE:
-        print("--- No cache found or loading failed, attempting to scrape... ---")
+        print("--- [STARTUP] Cache empty or load failed. Attempting scrape... ---") # <-- ADDED
         scraped_data = scrape_provider_performance()
+        print(f"--- [STARTUP] scrape_provider_performance returned data size: {len(scraped_data)} ---") # <-- ADDED
         if scraped_data:
-            PROVIDER_PERFORMANCE_CACHE = scraped_data
-            save_performance_to_csv(PROVIDER_PERFORMANCE_CACHE, PERFORMANCE_CSV_PATH) # Save if scrape succeeds
+            print("--- [STARTUP] Scrape successful. Attempting save... ---") # <-- ADDED
+            save_succeeded = save_performance_to_csv(scraped_data, PERFORMANCE_CSV_PATH)
+            print(f"--- [STARTUP] save_performance_to_csv returned: {save_succeeded} ---") # <-- ADDED
+            if save_succeeded:
+                PROVIDER_PERFORMANCE_CACHE = scraped_data # Update cache only if save succeeded
+                print("--- [STARTUP] Cache updated with scraped data. ---") # <-- ADDED
+            else:
+                 print("--- [STARTUP] CSV save failed. Cache remains empty. ---") # <-- ADDED
         else:
-            print("--- Warning: Scraping also failed. Performance prioritization disabled. ---")
-            PROVIDER_PERFORMANCE_CACHE = [] # Ensure it's an empty list if both fail
+            print("--- [STARTUP] Scraping failed or returned no data. Cache remains empty. ---") # <-- ADDED
+            PROVIDER_PERFORMANCE_CACHE = [] # Ensure it's an empty list if scraping fails
     else:
-         print(f"--- Initialization complete using cached data. Found {len(PROVIDER_PERFORMANCE_CACHE)} performance entries. ---")
+         print(f"--- [STARTUP] Initialization complete using existing cached data (size: {len(PROVIDER_PERFORMANCE_CACHE)}). ---") # <-- UPDATED
     # --- End data loading ---
 
     # Make sure host is accessible if running in container or VM
-    app.run(host='0.0.0.0', port=5000, debug=False) # Disabled debug mode for lower idle resource usage
+    print("--- [STARTUP] Starting Flask application... ---") # <-- UPDATED
+    app.run(host='0.0.0.0', port=5000, debug=True) # ENABLED debug mode for better logging/reloading

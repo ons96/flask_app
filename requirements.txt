@@ -1,0 +1,11 @@
+Flask
+Flask-Session
+g4f>=0.2.4.1
+requests
+beautifulsoup4
+lxml
+python-dotenv
+duckduckgo_search
+google-generativeai
+
+aiohttp

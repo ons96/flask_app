@@ -1,0 +1,402 @@
+provider_name_scraped,model_name_scraped,intelligence_index,response_time_s,tokens_per_s
+OpenAI,o4-mini (high),70,39.94,126.6
+Microsoft Azure,o4-mini (high),70,84.34,68.5
+Google,Gemini 2.5 Pro,68,34.06,191.6
+Microsoft Azure,o3,67,44.75,79.5
+xAI,Grok 3 mini Reasoning (high),67,12.69,202.0
+xAI Fast,Grok 3 mini Reasoning (high) Fast,67,11.89,217.7
+OpenAI,o3-mini (high),66,45.98,163.9
+Microsoft Azure,o3-mini (high),66,37.95,203.2
+OpenAI,o3-mini,63,16.55,149.5
+Microsoft Azure,o3-mini,63,15.14,187.8
+OpenAI,o1,62,46.54,71.7
+Microsoft Azure,o1,62,30.99,113.2
+Google (AI_Studio),Gemini 2.5 Flash (Reasoning) (AI_Studio),60,9.82,329.1
+Lambda Labs,DeepSeek R1,60,75.58,37.9
+DeepSeek,DeepSeek R1,60,123.56,23.8
+Hyperbolic,DeepSeek R1,60,40.47,73.4
+Amazon Bedrock,DeepSeek R1,60,42.57,67.6
+Nebius Base,DeepSeek R1 Base,60,95.6,30.0
+Nebius Fast,DeepSeek R1 Fast,60,40.25,71.9
+CentML,DeepSeek R1,60,35.21,82.2
+Microsoft Azure,DeepSeek R1,60,25.18,115.4
+Fireworks (Fast),DeepSeek R1 (Fast),60,25.84,112.9
+"Deepinfra (Turbo, FP4)","DeepSeek R1 (Turbo, FP4)",60,24.74,116.5
+Deepinfra,DeepSeek R1,60,177.37,16.1
+FriendliAI,DeepSeek R1,60,34.32,84.3
+Novita Turbo,DeepSeek R1 Turbo,60,88.21,32.6
+Novita,DeepSeek R1,60,86.93,33.1
+SambaNova,DeepSeek R1,60,16.79,191.0
+Together.ai,DeepSeek R1,60,28.61,101.6
+kluster.ai,DeepSeek R1,60,99.79,28.7
+Hyperbolic,QwQ-32B,58,40.63,76.7
+Nebius Fast,QwQ-32B Fast,58,48.75,62.1
+CentML,QwQ-32B,58,35.2,86.2
+Fireworks,QwQ-32B,58,19.86,153.4
+Deepinfra,QwQ-32B,58,85.59,35.2
+Groq,QwQ-32B,58,7.62,403.0
+SambaNova,QwQ-32B,58,8.32,430.9
+Together.ai,QwQ-32B,58,32.2,94.3
+OpenAI,o1-mini,54,13.42,176.3
+Microsoft Azure,o1-mini,54,10.9,251.3
+DeepSeek,DeepSeek V3 (Mar' 25),53,23.14,25.4
+Replicate,DeepSeek V3 (Mar' 25),53,7.17,81.3
+Hyperbolic,DeepSeek V3 (Mar' 25),53,18.75,29.4
+Nebius Fast,DeepSeek V3 (Mar' 25) Fast,53,6.76,82.2
+Nebius,DeepSeek V3 (Mar' 25),53,27.92,18.3
+CentML,DeepSeek V3 (Mar' 25),53,7.09,76.6
+Microsoft Azure,DeepSeek V3 (Mar' 25),53,4.93,113.4
+Fireworks,DeepSeek V3 (Mar' 25),53,6.94,81.2
+Deepinfra,DeepSeek V3 (Mar' 25),53,39.58,12.8
+Novita,DeepSeek V3 (Mar' 25),53,18.44,28.6
+SambaNova,DeepSeek V3 (Mar' 25),53,2.52,263.8
+Together.ai,DeepSeek V3 (Mar' 25),53,18.9,30.1
+kluster.ai,DeepSeek V3 (Mar' 25),53,22.17,23.1
+OpenAI,GPT-4.1 mini,53,6.25,87.3
+Microsoft Azure,GPT-4.1 mini,53,5.89,99.9
+OpenAI,GPT-4.1,53,4.43,125.2
+Microsoft Azure,GPT-4.1,53,6.62,91.5
+Deepinfra,DeepSeek R1 Distill Qwen 32B,52,57.95,43.4
+Novita,DeepSeek R1 Distill Qwen 32B,52,122.06,20.7
+xAI,Grok 3,51,11.85,44.1
+xAI Fast,Grok 3 Fast,51,5.79,94.5
+Lambda Labs (FP8),Llama 4 Maverick (FP8),51,4.32,129.6
+Google Vertex,Llama 4 Maverick Vertex,51,4.33,125.6
+CentML (FP8),Llama 4 Maverick (FP8),51,4.25,126.5
+Microsoft Azure (FP8),Llama 4 Maverick (FP8),51,8.41,61.8
+Fireworks,Llama 4 Maverick,51,3.97,139.2
+Deepinfra (FP8),Llama 4 Maverick (FP8),51,4.75,113.1
+Novita (FP8),Llama 4 Maverick (FP8),51,6.94,79.0
+Groq,Llama 4 Maverick,51,1.92,290.2
+SambaNova,Llama 4 Maverick,51,1.18,778.8
+Together.ai (FP8),Llama 4 Maverick (FP8),51,5.13,101.9
+kluster.ai (FP8),Llama 4 Maverick (FP8),51,4.56,120.4
+OpenAI,GPT-4o (March 2025),50,3.51,164.7
+Google (AI Studio),Gemini 2.0 Pro Experimental (AI Studio),49,31.86,31.2
+Novita,DeepSeek R1 Distill Qwen 14B,49,69.49,36.4
+Together.ai,DeepSeek R1 Distill Qwen 14B,49,15.17,168.7
+Google (AI_Studio),Gemini 2.5 Flash (AI_Studio),48,9.02,303.5
+Lambda Labs,DeepSeek R1 Distill Llama 70B,48,41.76,60.6
+Cerebras,DeepSeek R1 Distill Llama 70B,48,1.3,0.0
+Nebius Base,DeepSeek R1 Distill Llama 70B Base,48,48.85,51.8
+Deepinfra,DeepSeek R1 Distill Llama 70B,48,78.76,31.9
+Novita,DeepSeek R1 Distill Llama 70B,48,30.3,84.7
+Groq,DeepSeek R1 Distill Llama 70B,48,5.85,440.3
+SambaNova,DeepSeek R1 Distill Llama 70B,48,9.52,315.0
+Together.ai,DeepSeek R1 Distill Llama 70B,48,20.48,124.3
+Amazon Bedrock,Claude 3.7 Sonnet,48,13.52,39.7
+Anthropic,Claude 3.7 Sonnet,48,8.0,75.5
+Google Vertex,Gemini 2.0 Flash Vertex,48,2.7,210.2
+Google (AI Studio),Gemini 2.0 Flash (AI Studio),48,2.54,232.3
+Reka AI,Reka Flash 3,47,45.0,56.8
+Google (AI Studio),Gemini 2.0 Flash (exp) (AI Studio),46,2.63,215.9
+DeepSeek,DeepSeek V3 (Dec '24),46,23.05,25.4
+Hyperbolic (FP8),DeepSeek V3 (Dec '24) (FP8),46,17.29,32.8
+Nebius,DeepSeek V3 (Dec '24),46,24.51,21.0
+Microsoft Azure,DeepSeek V3 (Dec '24),46,6.75,79.8
+Fireworks,DeepSeek V3 (Dec '24),46,9.17,58.6
+Deepinfra,DeepSeek V3 (Dec '24),46,34.59,14.7
+Novita Turbo,DeepSeek V3 (Dec '24) Turbo,46,16.24,32.5
+Novita,DeepSeek V3 (Dec '24),46,16.36,32.2
+Together.ai (FP8),DeepSeek V3 (Dec '24) (FP8),46,17.55,34.7
+Alibaba Cloud,Qwen2.5 Max,45,10.95,51.5
+Google (Vertex),Gemini 1.5 Pro (Sep) (Vertex),45,5.72,94.8
+Google (AI Studio),Gemini 1.5 Pro (Sep) (AI Studio),45,5.68,95.2
+Amazon Bedrock,Claude 3.5 Sonnet (Oct),44,12.49,43.7
+Google Vertex,Claude 3.5 Sonnet (Oct) Vertex,44,7.25,78.4
+Anthropic,Claude 3.5 Sonnet (Oct),44,7.42,77.2
+Perplexity,Sonar,43,7.41,91.6
+Lambda Labs,Llama 4 Scout,43,4.58,120.6
+Cerebras,Llama 4 Scout,43,0.47,0.0
+Google Vertex,Llama 4 Scout Vertex,43,4.19,131.1
+CentML,Llama 4 Scout,43,5.09,104.5
+Microsoft Azure,Llama 4 Scout,43,13.22,38.8
+Fireworks,Llama 4 Scout,43,3.99,139.5
+Deepinfra,Llama 4 Scout,43,5.35,98.0
+Novita,Llama 4 Scout,43,6.95,80.1
+Groq,Llama 4 Scout,43,1.22,594.5
+SambaNova,Llama 4 Scout,43,1.42,753.5
+Together.ai,Llama 4 Scout,43,4.35,120.5
+kluster.ai,Llama 4 Scout,43,6.43,83.8
+Perplexity,Sonar Pro,43,7.82,93.4
+Hyperbolic,QwQ 32B-Preview,43,46.2,55.5
+Deepinfra,QwQ 32B-Preview,43,56.78,44.3
+Together.ai,QwQ 32B-Preview,43,27.26,93.3
+OpenAI,GPT-4o (Nov '24),41,4.24,136.3
+Microsoft Azure,GPT-4o (Nov '24),41,4.96,132.4
+Google (AI Studio),Gemini 2.0 Flash-Lite (Feb '25) (AI Studio),41,2.73,205.3
+Lambda Labs (FP8),Llama 3.3 70B (FP8),41,11.14,47.0
+Cerebras,Llama 3.3 70B,41,0.45,0.0
+Hyperbolic,Llama 3.3 70B,41,17.2,33.0
+Amazon Bedrock,Llama 3.3 70B,41,3.63,162.8
+Nebius Fast,Llama 3.3 70B Fast,41,4.38,130.8
+Nebius Base,Llama 3.3 70B Base,41,26.11,19.7
+CentML,Llama 3.3 70B,41,3.9,146.3
+Microsoft Azure,Llama 3.3 70B,41,9.74,53.7
+Fireworks,Llama 3.3 70B,41,3.2,184.2
+"Deepinfra (Turbo, FP8)","Llama 3.3 70B (Turbo, FP8)",41,15.44,32.9
+Deepinfra,Llama 3.3 70B,41,38.59,13.1
+FriendliAI,Llama 3.3 70B,41,3.2,177.2
+Novita,Llama 3.3 70B,41,13.37,39.4
+Groq,Llama 3.3 70B,41,1.55,422.2
+SambaNova,Llama 3.3 70B,41,1.4,450.8
+Together.ai Turbo,Llama 3.3 70B Turbo,41,4.23,130.3
+kluster.ai,Llama 3.3 70B,41,20.59,24.9
+OpenAI,GPT-4.1 nano,41,2.15,269.6
+Microsoft Azure,GPT-4.1 nano,41,2.95,210.0
+OpenAI,GPT-4o (May '24),41,4.31,125.6
+Microsoft Azure,GPT-4o (May '24),41,4.75,124.3
+Lambda Labs (FP8),Llama 3.1 405B (FP8),40,16.1,32.2
+Replicate,Llama 3.1 405B,40,27.0,19.2
+Hyperbolic,Llama 3.1 405B,40,6.87,91.1
+Amazon Bedrock Standard,Llama 3.1 405B Standard,40,17.69,31.5
+Amazon Bedrock Latency Optimized,Llama 3.1 405B Latency Optimized,40,18.74,30.1
+Nebius Base,Llama 3.1 405B Base,40,16.76,31.2
+Google Vertex,Llama 3.1 405B Vertex,40,17.26,29.7
+Microsoft Azure,Llama 3.1 405B,40,16.37,31.4
+Fireworks,Llama 3.1 405B,40,6.41,85.4
+Deepinfra,Llama 3.1 405B,40,19.96,26.0
+SambaNova,Llama 3.1 405B,40,4.59,169.2
+Databricks,Llama 3.1 405B,40,13.81,38.3
+Together.ai Turbo,Llama 3.1 405B Turbo,40,5.21,104.3
+Hyperbolic,Qwen2.5 72B,40,17.94,31.8
+Nebius,Qwen2.5 72B,40,21.77,23.8
+Nebius Fast,Qwen2.5 72B Fast,40,8.03,66.9
+Fireworks,Qwen2.5 72B,40,7.75,68.1
+Deepinfra,Qwen2.5 72B,40,13.29,39.2
+Together.ai Turbo,Qwen2.5 72B Turbo,40,5.73,97.0
+Alibaba Cloud,Qwen2.5 72B,40,9.93,57.1
+MiniMax,MiniMax-Text-01,40,15.3,34.5
+Nebius,Phi-4,40,4.76,118.0
+Microsoft Azure,Phi-4,40,12.32,42.2
+Deepinfra,Phi-4,40,10.84,47.7
+Cohere,Command A,40,5.17,100.5
+Google (Vertex),Gemini 1.5 Flash (Sep) (Vertex),39,2.76,196.4
+Google (AI Studio),Gemini 1.5 Flash (Sep) (AI Studio),39,3.08,180.5
+Mistral,Mistral Large 2 (Nov '24),38,6.8,78.6
+Microsoft Azure,Mistral Large 2 (Nov '24),38,14.39,36.0
+Deepinfra,Gemma 3 27B,38,13.85,37.7
+xAI,Grok Beta,38,7.81,66.7
+Mistral,Pixtral Large,37,12.34,41.8
+Nebius Fast,Qwen2.5 Instruct 32B Fast,37,6.7,81.3
+Nebius Base,Qwen2.5 Instruct 32B Base,37,9.74,54.6
+Lambda Labs (FP8),Llama 3.1 Nemotron 70B (FP8),37,10.79,48.7
+Nebius Base,Llama 3.1 Nemotron 70B Base,37,12.92,40.7
+Nebius Fast,Llama 3.1 Nemotron 70B Fast,37,7.61,71.0
+Deepinfra,Llama 3.1 Nemotron 70B,37,14.51,35.3
+Amazon Bedrock,Nova Pro,37,4.31,126.1
+Amazon Bedrock Latency Optimized,Nova Pro Latency Optimized,37,4.26,130.1
+Mistral,Mistral Large 2 (Jul '24),37,14.04,36.7
+Amazon Bedrock,Mistral Large 2 (Jul '24),37,15.44,33.4
+Microsoft Azure,Mistral Large 2 (Jul '24),37,14.47,35.8
+Lambda Labs,Qwen2.5 Coder 32B,36,12.72,41.0
+Hyperbolic,Qwen2.5 Coder 32B,36,14.36,39.6
+Deepinfra,Qwen2.5 Coder 32B,36,10.44,49.2
+Together.ai,Qwen2.5 Coder 32B,36,6.3,86.1
+OpenAI,GPT-4o mini,36,7.99,65.6
+Microsoft Azure,GPT-4o mini,36,3.81,170.6
+Lambda Labs (FP8),Llama 3.1 70B (FP8),35,10.84,48.5
+Hyperbolic,Llama 3.1 70B,35,6.2,127.3
+Amazon Bedrock Standard,Llama 3.1 70B Standard,35,16.42,31.7
+Amazon Bedrock Latency Optimized,Llama 3.1 70B Latency Optimized,35,16.62,31.6
+Nebius Base,Llama 3.1 70B Base,35,13.31,39.5
+Nebius Fast,Llama 3.1 70B Fast,35,4.02,143.7
+Google Vertex,Llama 3.1 70B Vertex,35,7.13,72.8
+Microsoft Azure,Llama 3.1 70B,35,9.94,52.6
+Fireworks,Llama 3.1 70B,35,4.06,151.0
+"Deepinfra (Turbo, FP8)","Llama 3.1 70B (Turbo, FP8)",35,14.34,35.7
+Deepinfra,Llama 3.1 70B,35,28.2,18.1
+Novita,Llama 3.1 70B,35,31.27,16.6
+Together.ai Turbo,Llama 3.1 70B Turbo,35,4.87,111.7
+Simplismart,Llama 3.1 70B,35,4.49,125.5
+Mistral,Mistral Small 3.1,35,4.18,134.6
+Google Vertex,Mistral Small 3.1 Vertex,35,8.67,59.0
+Mistral,Mistral Small 3,35,3.96,135.9
+Deepinfra,Mistral Small 3,35,6.85,75.5
+Together.ai,Mistral Small 3,35,5.39,96.8
+Amazon Bedrock,Claude 3 Opus,35,20.5,25.9
+Google Vertex,Claude 3 Opus Vertex,35,24.71,22.5
+Anthropic,Claude 3 Opus,35,19.13,27.7
+Amazon Bedrock Standard,Claude 3.5 Haiku Standard,35,10.95,51.5
+Amazon Bedrock Latency Optimized,Claude 3.5 Haiku Latency Optimized,35,10.51,53.6
+Google Vertex,Claude 3.5 Haiku Vertex,35,9.0,66.1
+Anthropic,Claude 3.5 Haiku,35,8.57,65.8
+Novita,DeepSeek R1 Distill Llama 8B,34,52.44,48.3
+Deepinfra,Gemma 3 12B,34,19.1,27.1
+Google (Vertex),Gemini 1.5 Pro (May) (Vertex),34,7.77,67.5
+Google (AI Studio),Gemini 1.5 Pro (May) (AI Studio),34,7.93,66.7
+Alibaba Cloud,Qwen Turbo,34,5.63,108.8
+Amazon Bedrock,Llama 3.2 90B (Vision),33,8.75,60.7
+Google Vertex,Llama 3.2 90B (Vision) Vertex,33,15.6,32.4
+Fireworks,Llama 3.2 90B (Vision),33,12.56,41.1
+Deepinfra,Llama 3.2 90B (Vision),33,26.37,19.4
+Together.ai Turbo,Llama 3.2 90B (Vision) Turbo,33,16.81,30.2
+Together.ai,Qwen2 72B,33,12.24,42.1
+Alibaba Cloud,Qwen2 72B,33,17.54,31.0
+Amazon Bedrock,Nova Lite,33,2.09,281.6
+Google AI Studio,Gemini 1.5 Flash-8B AI Studio,31,2.02,272.3
+AI21 Labs,Jamba 1.5 Large,29,8.03,66.7
+Microsoft Azure,Jamba 1.5 Large,29,10.4,51.4
+AI21 Labs,Jamba 1.6 Large,29,8.79,60.9
+Google (Vertex),Gemini 1.5 Flash (May) (Vertex),28,1.87,314.0
+Google (AI Studio),Gemini 1.5 Flash (May) (AI Studio),28,1.92,302.0
+Amazon Bedrock,Nova Micro,28,1.83,328.4
+Fireworks,Yi-Large,28,7.72,68.8
+Amazon Bedrock,Claude 3 Sonnet,28,12.37,43.1
+Anthropic,Claude 3 Sonnet,28,8.79,60.8
+Mistral,Codestral (Jan '25),28,2.72,202.6
+Google Vertex,Codestral (Jan '25) Vertex,28,3.49,149.1
+Replicate,Llama 3 70B,27,10.68,48.5
+Hyperbolic,Llama 3 70B,27,6.36,116.2
+Amazon Bedrock,Llama 3 70B,27,10.92,47.5
+Microsoft Azure,Llama 3 70B,27,27.14,18.9
+Fireworks,Llama 3 70B,27,3.72,146.9
+Deepinfra,Llama 3 70B,27,23.26,22.0
+Novita,Llama 3 70B,27,25.52,20.5
+Groq,Llama 3 70B,27,1.8,337.8
+"Together.ai (Reference, FP16)","Llama 3 70B (Reference, FP16)",27,4.2,136.9
+"Together.ai (Turbo, FP8)","Llama 3 70B (Turbo, FP8)",27,3.97,138.9
+Mistral,Mistral Small (Sep '24),27,8.47,61.5
+Microsoft Azure,Phi-4 Multimodal,27,23.01,22.1
+Nebius Fast,Qwen2.5 Coder 7B  Fast,27,2.81,215.3
+Nebius Base,Qwen2.5 Coder 7B  Base,27,2.97,202.0
+Mistral,Mistral Large (Feb '24),26,16.81,30.6
+Amazon Bedrock,Mistral Large (Feb '24),26,11.5,45.0
+Mistral,Mixtral 8x22B,26,7.81,66.8
+Nebius Base,Mixtral 8x22B Base,26,7.02,77.4
+Nebius Fast,Mixtral 8x22B Fast,26,5.6,98.7
+Fireworks,Mixtral 8x22B,26,5.96,89.3
+Together.ai,Mixtral 8x22B,26,6.07,88.7
+CentML,Phi-4 Mini,26,2.68,220.0
+Microsoft Azure,Phi-4 Mini,26,9.17,56.5
+Microsoft Azure,Phi-3 Medium 14B,25,9.97,52.3
+Deepinfra,Gemma 3 4B,24,5.93,89.2
+Amazon Bedrock,Claude 2.1,24,18.73,29.5
+Anthropic,Claude 2.1,24,37.06,13.8
+Lambda Labs,Llama 3.1 8B,24,3.91,144.8
+Cerebras,Llama 3.1 8B,24,0.49,0.0
+Hyperbolic,Llama 3.1 8B,24,3.43,247.6
+Amazon Bedrock,Llama 3.1 8B,24,5.88,90.6
+Nebius Fast,Llama 3.1 8B Fast,24,3.14,187.5
+Nebius Base,Llama 3.1 8B Base,24,8.12,66.0
+Google Vertex,Llama 3.1 8B Vertex,24,4.38,118.9
+Microsoft Azure,Llama 3.1 8B,24,2.5,225.9
+Fireworks,Llama 3.1 8B,24,2.22,273.8
+Deepinfra,Llama 3.1 8B,24,11.88,43.9
+FriendliAI,Llama 3.1 8B,24,1.48,441.1
+Novita,Llama 3.1 8B,24,7.27,76.6
+Groq,Llama 3.1 8B,24,0.82,883.3
+SambaNova,Llama 3.1 8B,24,0.67,0.0
+Together.ai Turbo,Llama 3.1 8B Turbo,24,2.93,188.2
+Simplismart,Llama 3.1 8B,24,1.24,464.6
+kluster.ai,Llama 3.1 8B,24,8.56,61.7
+Mistral,Pixtral 12B,23,5.25,100.9
+Hyperbolic,Pixtral 12B,23,7.92,75.6
+Mistral,Mistral Small (Feb '24),23,4.12,131.5
+Microsoft Azure,Mistral Small (Feb '24),23,6.08,87.7
+Mistral,Mistral Medium,23,12.57,41.0
+Mistral,Ministral 8B,22,4.07,131.7
+Nebius Fast,Gemma 2 9B Fast,22,3.37,172.9
+Nebius Base,Gemma 2 9B Base,22,3.46,170.3
+Deepinfra,Gemma 2 9B,22,19.28,26.8
+Groq,Gemma 2 9B,22,0.93,722.3
+Together.ai,Gemma 2 9B,22,3.95,133.8
+Lambda Labs,LFM 40B,22,3.47,165.9
+Amazon Bedrock,Command-R+,21,11.04,47.4
+Cohere,Command-R+,21,9.89,52.0
+Replicate,Llama 3 8B,21,6.54,81.1
+Amazon Bedrock,Llama 3 8B,21,5.15,103.4
+Microsoft Azure,Llama 3 8B,21,7.13,73.8
+Deepinfra,Llama 3 8B,21,4.63,113.0
+Novita,Llama 3 8B,21,9.62,57.3
+Groq,Llama 3 8B,21,0.73,0.0
+Together.ai,Llama 3 8B,21,3.29,179.1
+Mistral,Codestral (May '24),20,5.03,106.1
+Cohere,Aya Expanse 32B,20,4.29,121.2
+Amazon Bedrock,Command-R+ (Apr '24),20,11.04,47.4
+Cohere,Command-R+ (Apr '24),20,7.42,69.6
+Microsoft Azure,Command-R+ (Apr '24),20,17.99,28.9
+Databricks,DBRX,20,7.82,68.9
+Mistral,Ministral 3B,20,2.44,229.6
+Mistral,Mistral NeMo,20,3.79,142.5
+Nebius Fast,Mistral NeMo Fast,20,3.63,159.7
+Nebius Base,Mistral NeMo Base,20,13.67,38.3
+Deepinfra,Mistral NeMo,20,8.87,58.0
+Lambda Labs (FP8),Llama 3.2 3B (FP8),20,2.81,210.7
+Hyperbolic,Llama 3.2 3B,20,8.05,77.9
+Amazon Bedrock,Llama 3.2 3B,20,7.35,72.7
+Nebius Base,Llama 3.2 3B Base,20,4.48,125.4
+CentML,Llama 3.2 3B,20,2.44,246.5
+Deepinfra,Llama 3.2 3B,20,3.61,145.6
+Novita,Llama 3.2 3B,20,6.94,79.7
+SambaNova,Llama 3.2 3B,20,0.51,0.0
+Together.ai Turbo,Llama 3.2 3B Turbo,20,4.09,145.1
+Together.ai,DeepSeek R1 Distill Qwen 1.5B,19,6.7,386.2
+AI21 Labs,Jamba 1.5 Mini,18,3.23,169.9
+Microsoft Azure,Jamba 1.5 Mini,18,6.53,82.4
+AI21 Labs,Jamba 1.6 Mini,18,2.87,199.9
+Mistral,Mixtral 8x7B,17,6.51,80.8
+Amazon Bedrock,Mixtral 8x7B,17,7.11,73.7
+Nebius Fast,Mixtral 8x7B Fast,17,10.14,52.3
+Nebius Base,Mixtral 8x7B Base,17,10.07,52.8
+Deepinfra,Mixtral 8x7B,17,5.94,87.0
+Databricks,Mixtral 8x7B,17,5.77,94.7
+Together.ai,Mixtral 8x7B,17,10.51,50.3
+Cohere,Aya Expanse 8B,16,3.11,167.1
+Amazon Bedrock,Command-R,15,4.91,109.2
+Cohere,Command-R,15,6.23,82.9
+Amazon Bedrock,Command-R (Mar '24),15,4.97,108.2
+Cohere,Command-R (Mar '24),15,2.99,175.8
+Microsoft Azure,Command-R (Mar '24),15,11.26,46.4
+Mistral,Codestral-Mamba,14,5.8,93.1
+Mistral,Mistral 7B,10,5.02,105.6
+Deepinfra,Mistral 7B,10,6.77,76.5
+Novita,Mistral 7B,10,5.12,116.6
+Together.ai,Mistral 7B,10,3.0,178.4
+Amazon Bedrock,Llama 3.2 1B,10,4.71,117.1
+Nebius Base,Llama 3.2 1B Base,10,2.31,272.9
+Deepinfra,Llama 3.2 1B,10,4.76,111.7
+SambaNova,Llama 3.2 1B,10,0.37,0.0
+Replicate,Llama 2 Chat 7B,8,4.26,132.8
+OpenAI,o1-preview,0,21.98,153.0
+Microsoft Azure,o1-preview,0,25.31,129.5
+OpenAI,GPT-4o (Aug '24),0,4.74,113.6
+Microsoft Azure,GPT-4o (Aug '24),0,5.7,101.5
+OpenAI,GPT-4.5 (Preview),0,8.07,70.8
+Amazon Bedrock,Llama 3.2 11B (Vision),0,3.97,143.5
+CentML,Llama 3.2 11B (Vision),0,6.37,84.2
+Deepinfra,Llama 3.2 11B (Vision),0,12.27,42.4
+Together.ai Turbo,Llama 3.2 11B (Vision) Turbo,0,4.89,108.5
+Nebius Fast,Gemma 2 27B Fast,0,6.23,88.3
+Nebius Base,Gemma 2 27B Base,0,9.65,55.3
+Together.ai,Gemma 2 27B,0,5.73,90.4
+Amazon Bedrock,Claude 3.5 Sonnet (June),0,11.69,46.4
+Google Vertex,Claude 3.5 Sonnet (June) Vertex,0,7.12,79.2
+Anthropic,Claude 3.5 Sonnet (June),0,7.1,79.4
+Amazon Bedrock,Claude 3 Haiku,0,5.78,103.4
+Anthropic,Claude 3 Haiku,0,4.1,139.4
+Mistral,Mistral Saba,0,6.03,87.6
+"Nebius Fast, FP8","DeepSeek Coder V2 Lite Fast, FP8",0,5.03,112.9
+"Nebius Base, FP8","DeepSeek Coder V2 Lite Base, FP8",0,5.06,111.9
+Perplexity,Sonar Reasoning,0,31.63,83.1
+xAI,Grok 3 mini Reasoning (low),0,24.57,103.2
+xAI Fast,Grok 3 mini Reasoning (low) Fast,0,11.88,216.7
+Upstage,Solar Mini,0,8.68,68.6
+Reka AI,Reka Flash,0,12.14,44.7
+Reka AI,Reka Core,0,18.98,27.7
+Reka AI,Reka Flash (Feb '24),0,12.06,45.0
+Reka AI,Reka Edge,0,6.87,83.2
+Alibaba Cloud,Qwen1.5 Chat 110B,0,22.67,23.7
+Deepinfra,Qwen3 14B (Reasoning),0,48.49,52.2
+Fireworks,Qwen3 235B A22B (Reasoning),0,40.65,62.3
+Deepinfra,Qwen3 235B A22B (Reasoning),0,106.98,23.5
+Fireworks,Qwen3 30B A3B (Reasoning),0,29.88,85.7
+Deepinfra,Qwen3 30B A3B (Reasoning),0,47.52,53.2
+Deepinfra,Qwen3 32B (Reasoning),0,79.16,31.8
+OpenAI,GPT-4 Turbo,0,11.94,44.5
+Microsoft Azure,GPT-4 Turbo,0,11.52,49.6
+OpenAI,GPT-4,0,19.0,27.4
+Google (AI Studio),Gemini 2.0 Flash-Lite (Preview) (AI Studio),0,2.75,202.9
+Anthropic,Claude 2.0,0,17.18,30.7
+Deepinfra,OpenChat 3.5,0,12.63,40.7
+AI21 Labs,Jamba Instruct,0,3.18,173.2
