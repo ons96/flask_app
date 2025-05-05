@@ -455,6 +455,47 @@ else:
 # --- End Moved Data Loading ---
 
 
+# --- Fetch External Models on Module Load ---
+# --- Fetch Chutes Models (Async) ---
+try:
+    print("--- [MODULE LOAD] Initializing: Fetching Chutes AI models... ---")
+    # Run the async function to populate CHUTES_MODELS_CACHE
+    # Handle potential RuntimeError if an event loop is already running (less common in standard WSGI)
+    try:
+        asyncio.run(fetch_chutes_models())
+    except RuntimeError as e:
+        if "cannot run nested event loops" in str(e):
+            print("--- [MODULE LOAD] Warning: Detected existing event loop for Chutes fetch. Attempting to use it. ---")
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(fetch_chutes_models())
+        else:
+            raise # Re-raise other runtime errors
+    print(f"--- [MODULE LOAD] Chutes models fetched: {len(CHUTES_MODELS_CACHE)} ---")
+except Exception as e:
+    print(f"--- [MODULE LOAD] Error running fetch_chutes_models at startup: {e} ---")
+    CHUTES_MODELS_CACHE = [] # Ensure it's empty on error
+# --- End Chutes Fetch ---
+
+# --- Fetch Groq Models (Async) ---
+try:
+    print("--- [MODULE LOAD] Initializing: Fetching Groq API models... ---")
+    # Handle potential RuntimeError if an event loop is already running
+    try:
+        asyncio.run(fetch_groq_models())
+    except RuntimeError as e:
+        if "cannot run nested event loops" in str(e):
+            print("--- [MODULE LOAD] Warning: Detected existing event loop for Groq fetch. Attempting to use it. ---")
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(fetch_groq_models())
+        else:
+            raise # Re-raise other runtime errors
+    print(f"--- [MODULE LOAD] Groq models fetched: {len(GROQ_MODELS_CACHE)} ---")
+except Exception as e:
+    print(f"--- [MODULE LOAD] Error running fetch_groq_models at startup: {e} ---")
+    GROQ_MODELS_CACHE = [] # Ensure it's empty on error
+# --- End Groq Fetch ---
+# --- End Fetch External Models ---
+
 app = Flask(__name__) # Flask automatically looks for 'static' folder
 app.secret_key = "your-secret-key" # Replace with a strong secret key
 app.config["SESSION_TYPE"] = "filesystem"
@@ -1566,26 +1607,7 @@ def load_chat(chat_id):
         return redirect(url_for('saved_chats'))
 
 if __name__ == '__main__':
-    # --- Fetch Chutes Models (Async) ---
-    try:
-        print("--- Initializing: Fetching Chutes AI models... ---")
-        # Run the async function to populate CHUTES_MODELS_CACHE
-        asyncio.run(fetch_chutes_models())
-        print(f"--- Chutes models fetched: {len(CHUTES_MODELS_CACHE)} ---")
-    except Exception as e:
-        print(f"--- Error running fetch_chutes_models at startup: {e} ---")
-        CHUTES_MODELS_CACHE = [] # Ensure it's empty on error
-    # --- End Chutes Fetch ---
-
-    # --- Fetch Groq Models (Async) ---
-    try:
-        print("--- Initializing: Fetching Groq API models... ---")
-        asyncio.run(fetch_groq_models())
-        print(f"--- Groq models fetched: {len(GROQ_MODELS_CACHE)} ---")
-    except Exception as e:
-        print(f"--- Error running fetch_groq_models at startup: {e} ---")
-        GROQ_MODELS_CACHE = [] # Ensure it's empty on error
-    # --- End Groq Fetch ---
+    # Model fetching is now done at module level
 
     # --- Performance data loading is now done at module level ---
 
