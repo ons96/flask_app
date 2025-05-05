@@ -34,8 +34,8 @@ import re
 
 
 # Load environment variables from .env file
-# Load environment variables from .env file in the parent directory
-dotenv_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+# Load environment variables from the application directory
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env') # Load from same directory as app.py
 load_dotenv(dotenv_path=dotenv_path)
 
 if platform.system() == 'Windows':
