@@ -17,6 +17,14 @@ except ImportError:
     print("Error: Could not import ProviderUtils from g4f.Provider. Provider mapping disabled.")
     ProviderUtils = None
 
+# Try importing Cerebras Provider directly
+try:
+    from g4f.Provider import Cerebras
+    CEREBRAS_PROVIDER_CLASS = Cerebras
+except ImportError:
+    print("Warning: Could not import g4f.Provider.Cerebras. Cerebras-specific provider targeting disabled.")
+    CEREBRAS_PROVIDER_CLASS = None
+
 import os
 import json
 import uuid
@@ -51,6 +59,9 @@ CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 print(f"--- GOOGLE_API_KEY Loaded: {'Exists' if GOOGLE_API_KEY else 'Not Found'} ---") # API Key Load Check
+# Add checks for other keys
+print(f"--- CEREBRAS_API_KEY Loaded: {'Exists' if CEREBRAS_API_KEY else 'Not Found'} ---")
+print(f"--- GROQ_API_KEY Loaded: {'Exists' if GROQ_API_KEY else 'Not Found'} ---")
 
 CHUTES_API_KEY = os.getenv("CHUTES_API_KEY")
 # Map user-facing model names to provider-specific names if they differ
@@ -950,7 +961,9 @@ def index():
                     if should_try_cerebras:
                         provider_name_for_attempt = "Cerebras (Direct API)"
                         attempted_direct_providers.add("cerebras")
-                        cerebras_provider_cls = provider_class_map.get("cerebras")
+                        # Use the directly imported class (if available) instead of map
+                        # cerebras_provider_cls = provider_class_map.get("cerebras")
+                        cerebras_provider_cls = CEREBRAS_PROVIDER_CLASS # Use directly imported class
                         # Use the mapped ID if it exists and is not None, otherwise use the original selection
                         model_to_use_cerebras = cerebras_model_id if cerebras_model_id else selected_model_for_request
 
