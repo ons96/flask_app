@@ -417,6 +417,33 @@ async def fetch_groq_models():
 # --- Global variable to store scraped performance data ---
 PROVIDER_PERFORMANCE_CACHE = [] # Initialize cache at module level
 
+# --- Load or Scrape performance data (Moved Here) ---
+print("--- [MODULE LOAD] Entering performance data handling ---")
+print(f"--- [MODULE LOAD] Checking for CSV at: {PERFORMANCE_CSV_PATH} ---")
+PROVIDER_PERFORMANCE_CACHE = load_performance_from_csv(PERFORMANCE_CSV_PATH)
+print(f"--- [MODULE LOAD] load_performance_from_csv returned cache size: {len(PROVIDER_PERFORMANCE_CACHE)} ---")
+
+if not PROVIDER_PERFORMANCE_CACHE:
+    print("--- [MODULE LOAD] Cache empty or load failed. Attempting scrape... ---")
+    scraped_data = scrape_provider_performance()
+    print(f"--- [MODULE LOAD] scrape_provider_performance returned data size: {len(scraped_data)} ---")
+    if scraped_data:
+        print("--- [MODULE LOAD] Scrape successful. Attempting save... ---")
+        save_succeeded = save_performance_to_csv(scraped_data, PERFORMANCE_CSV_PATH)
+        print(f"--- [MODULE LOAD] save_performance_to_csv returned: {save_succeeded} ---")
+        if save_succeeded:
+            PROVIDER_PERFORMANCE_CACHE = scraped_data # Update cache only if save succeeded
+            print("--- [MODULE LOAD] Cache updated with scraped data. ---")
+        else:
+             print("--- [MODULE LOAD] CSV save failed. Cache remains empty. ---")
+    else:
+        print("--- [MODULE LOAD] Scraping failed or returned no data. Cache remains empty. ---")
+        PROVIDER_PERFORMANCE_CACHE = [] # Ensure it's an empty list if scraping fails
+else:
+     print(f"--- [MODULE LOAD] Initialization complete using existing cached data (size: {len(PROVIDER_PERFORMANCE_CACHE)}). ---")
+# --- End Moved Data Loading ---
+
+
 app = Flask(__name__) # Flask automatically looks for 'static' folder
 app.secret_key = "your-secret-key" # Replace with a strong secret key
 app.config["SESSION_TYPE"] = "filesystem"
@@ -1547,32 +1574,8 @@ if __name__ == '__main__':
         GROQ_MODELS_CACHE = [] # Ensure it's empty on error
     # --- End Groq Fetch ---
 
-    # --- Load or Scrape performance data on startup ---
-    print("--- [STARTUP] Entering performance data handling ---") # <-- ADDED
-    print(f"--- [STARTUP] Checking for CSV at: {PERFORMANCE_CSV_PATH} ---") # <-- ADDED
-    PROVIDER_PERFORMANCE_CACHE = load_performance_from_csv(PERFORMANCE_CSV_PATH)
-    print(f"--- [STARTUP] load_performance_from_csv returned cache size: {len(PROVIDER_PERFORMANCE_CACHE)} ---") # <-- ADDED
-
-    if not PROVIDER_PERFORMANCE_CACHE:
-        print("--- [STARTUP] Cache empty or load failed. Attempting scrape... ---") # <-- ADDED
-        scraped_data = scrape_provider_performance()
-        print(f"--- [STARTUP] scrape_provider_performance returned data size: {len(scraped_data)} ---") # <-- ADDED
-        if scraped_data:
-            print("--- [STARTUP] Scrape successful. Attempting save... ---") # <-- ADDED
-            save_succeeded = save_performance_to_csv(scraped_data, PERFORMANCE_CSV_PATH)
-            print(f"--- [STARTUP] save_performance_to_csv returned: {save_succeeded} ---") # <-- ADDED
-            if save_succeeded:
-                PROVIDER_PERFORMANCE_CACHE = scraped_data # Update cache only if save succeeded
-                print("--- [STARTUP] Cache updated with scraped data. ---") # <-- ADDED
-            else:
-                 print("--- [STARTUP] CSV save failed. Cache remains empty. ---") # <-- ADDED
-        else:
-            print("--- [STARTUP] Scraping failed or returned no data. Cache remains empty. ---") # <-- ADDED
-            PROVIDER_PERFORMANCE_CACHE = [] # Ensure it's an empty list if scraping fails
-    else:
-         print(f"--- [STARTUP] Initialization complete using existing cached data (size: {len(PROVIDER_PERFORMANCE_CACHE)}). ---") # <-- UPDATED
-    # --- End data loading ---
+    # --- Performance data loading is now done at module level ---
 
     # Make sure host is accessible if running in container or VM
-    print("--- [STARTUP] Starting Flask application... ---") # <-- UPDATED
+    print("--- [STARTUP] Starting Flask application... ---")
     app.run(host='0.0.0.0', port=5000, debug=True) # ENABLED debug mode for better logging/reloading
