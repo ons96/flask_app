@@ -334,6 +334,8 @@ def save_chats(chats):
         print(f"--- Attempting to save chats to: {os.path.abspath(CHAT_STORAGE)} ---") # DEBUG PRINT
         with open(CHAT_STORAGE, "w", encoding='utf-8') as f:
             json.dump(chats, f, indent=4)
+            f.flush() # Ensure Python's buffer is flushed
+            os.fsync(f.fileno()) # Ask OS to sync file to disk
         print(f"--- Chat save successful for {len(chats)} chats. ---") # DEBUG PRINT
     except Exception as e:
         print(f"Error saving chats to {CHAT_STORAGE}: {e}")
@@ -1454,6 +1456,14 @@ def index():
 
         # Save chat history after processing response/error
         save_chats(chats)
+        # DEBUG: Re-load and check history immediately after save
+        try:
+            reloaded_chats = load_chats()
+            reloaded_current_chat = reloaded_chats.get(session['current_chat'], {})
+            print(f"--- POST Save Check: Reloaded history length: {len(reloaded_current_chat.get('history', []))} ---")
+        except Exception as e:
+            print(f"--- POST Save Check: Error reloading chats immediately after save: {e} ---")
+        # END DEBUG
         return redirect(url_for('index')) # Redirect after processing POST
 
     # --- Prepare data for rendering the page (GET request or after POST redirect) ---
