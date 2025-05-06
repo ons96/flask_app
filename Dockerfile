@@ -15,7 +15,10 @@ COPY requirements.txt .
 RUN uv pip install --system -r requirements.txt
 
 # Copy the rest of the application code into the container at /app
-COPY . .
+COPY --chown=user . /app
+
+# Ensure the session directory exists and is owned by the 'user'
+RUN mkdir -p /app/flask_session && chown user:user /app/flask_session
 
 # Make port 7860 available to the world outside this container (standard for HF Spaces)
 EXPOSE 7860
