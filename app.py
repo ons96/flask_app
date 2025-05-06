@@ -334,6 +334,7 @@ def save_chats(chats):
         print(f"--- Attempting to save chats to: {os.path.abspath(CHAT_STORAGE)} ---") # DEBUG PRINT
         with open(CHAT_STORAGE, "w", encoding='utf-8') as f:
             json.dump(chats, f, indent=4)
+        print(f"--- Chat save successful for {len(chats)} chats. ---") # DEBUG PRINT
     except Exception as e:
         print(f"Error saving chats to {CHAT_STORAGE}: {e}")
 
@@ -751,6 +752,10 @@ def index():
 
     current_chat = chats[session['current_chat']]
     current_model = current_chat.get("model", default_model)
+    # Add debug logs for loaded data
+    print(f"--- Index GET: Loaded {len(chats)} chats. Current chat ID: {session['current_chat']} ---")
+    print(f"--- Index GET: Current chat history length: {len(current_chat.get('history', []))} ---")
+    print(f"--- Index GET: Current chat model: {current_model} ---")
     # Ensure current model is valid, reset if not
     if current_model not in available_model_names and available_model_names:
         current_model = default_model
