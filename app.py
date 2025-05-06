@@ -331,6 +331,7 @@ def load_chats():
 def save_chats(chats):
     """Saves the chat histories to the JSON storage file."""
     try:
+        print(f"--- Attempting to save chats to: {os.path.abspath(CHAT_STORAGE)} ---") # DEBUG PRINT
         with open(CHAT_STORAGE, "w", encoding='utf-8') as f:
             json.dump(chats, f, indent=4)
     except Exception as e:
