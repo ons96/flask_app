@@ -13,3 +13,4 @@ litellm==1.65.0
 openai==1.69.0
 pip==25.1.1
 zipp==3.21.0
+gunicorn
