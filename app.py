@@ -53,7 +53,7 @@ from flask import Flask, request, session, redirect, url_for
 
 # --- Configuration ---
 # Path to store chat histories
-CHAT_STORAGE = os.path.join(os.path.dirname(__file__), '..', "chats.json") # Already adjusted
+CHAT_STORAGE = os.path.join(os.path.dirname(__file__), "chats.json") # NEW PATH - Save inside /app
 # API Keys loaded from .env
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
