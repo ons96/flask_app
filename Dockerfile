@@ -7,26 +7,36 @@ WORKDIR /app
 # Install uv
 RUN pip install uv
 
-# Copy the requirements file into the container at /app
+# Copy the requirements file first for better caching
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt using uv
 # Use --system to install in the main environment within the container
 RUN uv pip install --system -r requirements.txt
 
+# Create a non-root user first
+RUN useradd -m -u 1000 user
+
 # Copy the rest of the application code into the container at /app
-COPY --chown=user . /app
+# Files will initially be owned by root
+COPY . .
 
-# Ensure the session directory exists and is owned by the 'user'
-RUN mkdir -p /app/flask_session && chown user:user /app/flask_session
+# Create the session directory and change ownership of the entire app directory
+# This needs to run as root BEFORE switching user
+RUN mkdir -p /app/flask_session && chown -R 1000:1000 /app
 
-# Make port 7860 available to the world outside this container (standard for HF Spaces)
+# Now switch to the non-root user
+USER user
+
+# Set path explicitly for the non-root user
+ENV PATH="/home/user/.local/bin:${PATH}"
+
+# Make port 7860 available (this doesn't actually publish the port, more for documentation)
 EXPOSE 7860
 
-# Define environment variable for the port (optional, but good practice)
+# Define environment variable for the port
 ENV PORT=7860
 
 # Run app.py when the container launches using gunicorn
-# Bind to 0.0.0.0 to accept connections from outside the container
-# Use a single worker for simplicity on free tiers
+# Binding to 0.0.0.0 is essential inside the container
 CMD ["gunicorn", "--bind", "0.0.0.0:7860", "--workers", "1", "app:app"] 
