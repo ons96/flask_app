@@ -145,7 +145,7 @@ def get_available_models_with_provider_counts():
                     try:
                         if hasattr(provider, 'models') and model_name in provider.models:
                             model_providers.append(provider)
-                    except Exception as e:
+                    except Exception:
                         pass
                 
                 if model_providers:
@@ -169,7 +169,7 @@ def get_available_models_with_provider_counts():
                     model_list.append((model_name, len(model_providers), intel_index, resp_time))
                     processed_models += 1
             
-            except Exception as e:
+            except Exception:
                 continue
         
         # Sort models by priority
@@ -180,7 +180,7 @@ def get_available_models_with_provider_counts():
                 float('inf') if not isinstance(x[3], (int, float)) else float(x[3]),
                 str(x[0])
             ))
-        except Exception as e:
+        except Exception:
             model_list.sort(key=lambda x: str(x[0]))
         
         print(f"--- [MODEL_DISCOVERY] Processed {processed_models} models with provider information ---")
@@ -200,6 +200,7 @@ def normalize_model_name(name):
     name = re.sub(r'[^\w\s]', ' ', name)
     name = ' '.join(name.split())
     return name
+
 def extract_parameter_count(name):
     """Extract parameter count from model name (e.g., '7B', '70B')"""
     if not isinstance(name, str):
@@ -269,6 +270,8 @@ def get_dynamic_sorted_models():
     
     # Deduplicate by normalized name + parameter count
     seen_models = {}
+    deduplicated_free = []
+    
     for model in free_models:
         key = (model['normalized_name'], model['parameter_count'])
         if key not in seen_models or model['intelligence_index'] > seen_models[key]['intelligence_index']:
@@ -663,289 +666,4 @@ def index():
         print(f"--- Setting default model to: {default_model} (top of dynamic sort) ---")
     else:
         default_model = "gpt-3.5-turbo"
-        print("--- Warning: No available models found. Setting default to fallback. ---")
-    
-    # Initialize or load current chat
-    if 'current_chat' not in session or session['current_chat'] not in chats:
-        session['current_chat'] = str(uuid.uuid4())
-        chats[session['current_chat']] = {"history": [], "model": default_model, "name": "New Chat", "created_at": datetime.now().isoformat()}
-        save_chats(chats)
-    
-    # Handle case where session refers to a deleted chat
-    if session['current_chat'] not in chats:
-        if chats:
-            # Select the most recent chat if current is invalid
-            latest_chat_id = sorted(chats.keys(), key=lambda k: chats[k].get('created_at', ''), reverse=True)[0]
-            session['current_chat'] = latest_chat_id
-        else:
-            # Create a new chat if no chats exist
-            session['current_chat'] = str(uuid.uuid4())
-            chats[session['current_chat']] = {"history": [], "model": default_model, "name": "New Chat", "created_at": datetime.now().isoformat()}
-            save_chats(chats)
-
-    current_chat = chats[session['current_chat']]
-    current_model = current_chat.get("model", default_model)
-    
-    # Ensure current model is valid, reset if not
-    if current_model not in available_model_names and available_model_names:
-        current_model = default_model
-        current_chat["model"] = current_model
-
-    if request.method == 'POST':
-        # Handle New Chat action
-        if 'new_chat' in request.form:
-            session['current_chat'] = str(uuid.uuid4())
-            chats[session['current_chat']] = {"history": [], "model": default_model, "name": "New Chat", "created_at": datetime.now().isoformat()}
-            save_chats(chats)
-            return redirect(url_for('index'))
-        
-        # Handle Delete Chat action
-        if 'delete_chat' in request.form:
-            chat_to_delete = session.get('current_chat')
-            if chat_to_delete and chat_to_delete in chats:
-                print(f"--- Deleting chat: {chat_to_delete} ---")
-                del chats[chat_to_delete]
-                save_chats(chats)
-                session.pop('current_chat', None)
-                return redirect(url_for('index'))
-            else:
-                print(f"--- Delete request for invalid/missing chat ID: {chat_to_delete} ---")
-                return redirect(url_for('index'))
-
-        # Process message submission or regeneration
-        prompt_from_input = request.form.get('prompt', '').strip()
-        selected_model_for_request = request.form.get('model', default_model)
-        
-        # Validate selected model
-        if selected_model_for_request not in available_model_names and available_model_names:
-            selected_model_for_request = default_model
-
-        current_chat["model"] = selected_model_for_request
-        
-        # Simple response for demonstration
-        if prompt_from_input:
-            # Add user message
-            current_chat["history"].append({
-                "role": "user", 
-                "content": prompt_from_input, 
-                "timestamp": datetime.now().isoformat()
-            })
-            
-            # Add simple AI response
-            current_chat["history"].append({
-                "role": "assistant", 
-                "content": f"This is a placeholder response using {selected_model_for_request}. The dynamic model ordering is working!", 
-                "model": selected_model_for_request, 
-                "provider": "Demo Provider", 
-                "timestamp": datetime.now().isoformat()
-            })
-            
-            # Auto-name chat if it's new
-            if current_chat.get("name") == "New Chat" and any(msg["role"] == "user" for msg in current_chat["history"]):
-                first_user_prompt = next((msg["content"] for msg in current_chat["history"] if msg["role"] == "user"), None)
-                if first_user_prompt:
-                    clean_prompt = ''.join(c for c in ' '.join(first_user_prompt.split()[:6]) if c.isalnum() or c.isspace()).strip()
-                    timestamp_str = datetime.now().strftime("%b %d, %I:%M%p")
-                    chat_name = f"{clean_prompt[:30]}... ({timestamp_str})" if clean_prompt else f"Chat ({timestamp_str})"
-                    current_chat["name"] = chat_name
-
-        # Save chat history after processing
-        save_chats(chats)
-        return redirect(url_for('index'))
-
-    # Prepare data for rendering the page (GET request or after POST redirect)
-    history_html = ""
-    for msg in current_chat.get("history", []):
-        role_display = html.escape(msg["role"].title())
-        timestamp_str = msg.get("timestamp", "")
-        try:
-            timestamp_display = datetime.fromisoformat(timestamp_str).strftime("%I:%M:%S %p") if timestamp_str else "No Time"
-        except ValueError:
-            timestamp_display = "Invalid Time"
-        content_display = html.escape(msg["content"])
-        model_display = f"<small>Model: {html.escape(msg.get('model', 'N/A'))}</small>" if msg["role"] == "assistant" else ""
-        provider_display = f"<small>Provider: {html.escape(msg.get('provider', 'N/A'))}</small>" if msg["role"] == "assistant" else ""
-        bg_color = '#f9f9f9' if msg['role'] == 'user' else '#e9f5ff'
-        history_html += f'''<div style="margin:4px 0; padding:6px; border-bottom:1px solid #eee; background-color:{bg_color}; border-radius: 4px;">
-                             <b>{role_display}</b> <small>({timestamp_display})</small> {provider_display}<br>{model_display}<br>
-                             <div style="white-space: pre-wrap; word-wrap: break-word;">{content_display}</div>
-                           </div>'''
-
-    # Create model options for dropdown
-    model_options_html = ''
-    for model_name, provider_count, intel_index, resp_time in available_models_sorted_list:
-        if not model_name or not model_name.strip():
-            continue
-        selected_attr = "selected" if model_name == current_model else ""
-        # Format performance string, handle missing data
-        if resp_time != float('inf') and intel_index > 0:
-            perf_str = f"({intel_index}, {resp_time:.2f}s)"
-        elif resp_time != float('inf'):
-            perf_str = f"(Intel N/A, {resp_time:.2f}s)"
-        else:
-            perf_str = "(Perf N/A)"
-        model_options_html += f'<option value="{model_name}" {selected_attr}>{model_name} {perf_str}</option>'
-
-    return f'''<!DOCTYPE html>
-<html>
-<head>
-    <title>Chat - Dynamic Model Ordering</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {{ font-family: sans-serif; margin: 0; padding: 0; background-color: #fff; }}
-        #message-container {{ height: calc(100vh - 150px); overflow-y: auto; padding: 10px; border-bottom: 1px solid #ccc; }}
-        #input-area {{ padding: 10px; background-color: #f0f0f0; border-top: 1px solid #ccc; }}
-        textarea {{ width: 100%; box-sizing: border-box; height: 80px; font-size: 1em; margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; }}
-        select {{ width: 100%; padding: 8px; margin-bottom: 10px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }}
-        input[type="submit"], button {{ padding: 10px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; cursor: pointer; }}
-        .button-row {{ display: flex; gap: 10px; margin-top: 10px; }}
-        .button-row input {{ flex-grow: 1; background-color: #4CAF50; color: white; border-color: #4CAF50; }}
-        .nav-links {{ display: flex; justify-content: space-between; margin-bottom: 10px; }}
-        .nav-links button {{ padding: 8px 15px; border: 1px solid #ccc; border-radius: 4px; background-color: #e7e7e7; color: #333; cursor: pointer; }}
-    </style>
-</head>
-<body>
-    <div id="message-container">{history_html}</div>
-    <div id="input-area">
-        <form method="post" style="margin: 0;">
-            <select name="model">{model_options_html}</select>
-            <div class="nav-links">
-                <button type="submit" name="new_chat" value="1">New Chat</button>
-                <button type="submit" name="delete_chat" value="1">Delete Chat</button>
-            </div>
-            <textarea name="prompt" placeholder="Type your message..." autofocus></textarea>
-            <div class="button-row">
-                <input type="submit" name="send" value="Send">
-            </div>
-        </form>
-    </div>
-    <script>
-        var messageContainer = document.getElementById('message-container');
-        messageContainer.scrollTop = messageContainer.scrollHeight;
-    </script>
-</body>
-</html>'''
-
-def initialize_model_cache():
-    """Initialize the global model cache by fetching available models and their providers."""
-    global CACHED_AVAILABLE_MODELS_SORTED_LIST, CACHED_MODEL_PROVIDER_INFO, CACHED_PROVIDER_CLASS_MAP
-    
-    print("--- [CACHE] Starting model cache initialization ---")
-    start_time = time.time()
-    
-    try:
-        list_data, info_data, map_data = get_available_models_with_provider_counts()
-        
-        if not list_data or not isinstance(list_data, list):
-            raise ValueError("No valid model data returned from g4f")
-            
-        print(f"--- [CACHE] Successfully retrieved {len(list_data)} models from g4f")
-        
-        CACHED_AVAILABLE_MODELS_SORTED_LIST = list_data
-        CACHED_MODEL_PROVIDER_INFO = info_data if info_data and isinstance(info_data, dict) else {}
-        CACHED_PROVIDER_CLASS_MAP = map_data if map_data and isinstance(map_data, dict) else {}
-        
-        elapsed = time.time() - start_time
-        print(f"--- [CACHE] Model cache initialized in {elapsed:.2f}s with {len(CACHED_AVAILABLE_MODELS_SORTED_LIST)} models ---")
-        
-    except Exception as e:
-        elapsed = time.time() - start_time
-        print(f"--- [CACHE] Error initializing model cache after {elapsed:.2f}s: {str(e)}")
-        print("--- [CACHE] Falling back to default models")
-        
-        # Set default values
-        default_models = [
-            ("gpt-3.5-turbo", 1, 85, 0.5),
-            ("gpt-4", 1, 95, 1.0),
-            ("claude-3-opus", 1, 98, 1.2),
-            ("gemini-pro", 1, 93, 0.6),
-            ("llama-2-70b", 1, 92, 1.5)
-        ]
-        CACHED_AVAILABLE_MODELS_SORTED_LIST = default_models
-        CACHED_MODEL_PROVIDER_INFO = {model[0]: [] for model in default_models}
-        CACHED_PROVIDER_CLASS_MAP = {}
-        
-        print(f"--- [CACHE] Initialized with {len(default_models)} default models ---")
-
-def initialize_application():
-    """Initialize the application with proper error handling and logging."""
-    print("\n" + "="*60)
-    print("  INITIALIZING APPLICATION")
-    print("="*60)
-    
-    # Ensure required directories exist
-    required_dirs = [
-        os.path.join(APP_DIR, 'chats'),
-        os.path.join(APP_DIR, 'logs'),
-        os.path.join(APP_DIR, 'data'),
-        os.path.join(APP_DIR, 'flask_session')
-    ]
-    
-    for dir_path in required_dirs:
-        try:
-            os.makedirs(dir_path, exist_ok=True)
-            print(f"--- [INIT] Created directory: {dir_path}")
-        except Exception as e:
-            print(f"--- [ERROR] Failed to create directory {dir_path}: {e}")
-    
-    # Initialize model cache
-    print("\n--- [INIT] Initializing model cache...")
-    initialize_model_cache()
-    
-    # Load context window data
-    try:
-        print("\n--- [INIT] Loading context window data...")
-        load_context_window_data_from_csv()
-        print(f"--- [INIT] Loaded context window data for {len(MODEL_CONTEXT_WINDOW_CACHE)} models")
-    except Exception as e:
-        print(f"--- [ERROR] Failed to load context window data: {e}")
-    
-    # Load performance data if available
-    try:
-        print("\n--- [INIT] Loading performance data...")
-        global PROVIDER_PERFORMANCE_CACHE
-        PROVIDER_PERFORMANCE_CACHE = load_performance_from_csv()
-        print(f"--- [INIT] Loaded performance data for {len(PROVIDER_PERFORMANCE_CACHE)} entries")
-        
-        # If no performance data, try to scrape it
-        if not PROVIDER_PERFORMANCE_CACHE:
-            print("--- [INIT] No performance data found, attempting to scrape...")
-            scraped_data = scrape_provider_performance()
-            if scraped_data:
-                save_performance_to_csv(scraped_data)
-                PROVIDER_PERFORMANCE_CACHE = scraped_data
-                print(f"--- [INIT] Scraped and saved {len(scraped_data)} performance entries")
-    except Exception as e:
-        print(f"--- [WARNING] Could not load performance data: {e}")
-    
-    print("\n" + "="*60)
-    print("  APPLICATION INITIALIZATION COMPLETE")
-    print("="*60 + "\n")
-
-if __name__ == '__main__':
-    try:
-        # Initialize application components
-        initialize_application()
-        
-        # Start the Flask development server
-        host = '0.0.0.0'
-        port = 5000
-        print(f"\n{'='*60}")
-        print(f"  STARTING FLASK APPLICATION")
-        print(f"  - Host: {host}")
-        print(f"  - Port: {port}")
-        print(f"  - Models available: {len(CACHED_AVAILABLE_MODELS_SORTED_LIST)}")
-        print(f"{'='*60}\n")
-        
-        # Run the application
-        app.run(host=host, port=port, debug=True, use_reloader=False)
-        
-    except Exception as e:
-        print(f"\n{'!'*60}")
-        print("  FATAL ERROR DURING APPLICATION STARTUP")
-        print(f"{'!'*60}")
-        print(f"Error: {str(e)}")
-        print("\nStack trace:")
-        import traceback
-        traceback.print_exc()
-        print(f"\n{'!'*60}\n")
+        print("--- Warning: No available

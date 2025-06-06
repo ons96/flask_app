@@ -1,16 +1,46 @@
-Flask
-Flask-Session
-python-dotenv
-requests
-beautifulsoup4
-lxml
-duckduckgo-search
-aiohttp
-google-generativeai
-g4f==0.5.0.1
-importlib-metadata==8.6.1
-litellm==1.65.0
-openai==1.69.0
-pip==25.1.1
-zipp==3.21.0
-gunicorn
+# Enhanced Flask LLM Chat Application Requirements
+# Core Flask dependencies
+Flask==2.3.3
+Flask-Session==0.5.0
+Werkzeug==2.3.7
+
+# LLM and AI dependencies
+g4f>=0.2.0.0
+openai>=1.0.0
+
+# HTTP and API dependencies
+requests>=2.31.0
+aiohttp>=3.9.0
+httpx>=0.25.0
+
+# Web scraping and search
+beautifulsoup4>=4.12.0
+duckduckgo-search>=3.9.0
+lxml>=4.9.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Additional utilities
+asyncio-throttle>=1.0.2
+nest-asyncio>=1.5.8
+typing-extensions>=4.8.0
+
+# Development and debugging (optional)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Platform-specific dependencies
+# Windows async support
+pywin32>=306; sys_platform == "win32"
+
+# Optional API clients for enhanced functionality
+google-generativeai>=0.3.0
+groq>=0.4.0
+cerebras-cloud-sdk>=1.0.0
