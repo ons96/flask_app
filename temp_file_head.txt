@@ -1,0 +1,50 @@
+from flask_session import Session
+from g4f import ChatCompletion
+# Import necessary g4f components for dynamic model loading
+from g4f.models import ModelUtils, IterListProvider
+# Import specific providers we might want to target
+try:
+    from g4f.Provider import Groq # Try importing the Groq provider
+    GROQ_PROVIDER_CLASS = Groq
+except ImportError:
+    print("Warning: Could not import g4f.Provider.Groq. Groq-specific provider targeting disabled.")
+    GROQ_PROVIDER_CLASS = None
+# Import ProviderUtils to get the list of providers
+# Assuming the correct path is directly under g4f.Provider
+try:
+    from g4f.Provider import ProviderUtils
+except ImportError:
+    print("Error: Could not import ProviderUtils from g4f.Provider. Provider mapping disabled.")
+    ProviderUtils = None
+
+# Try importing Cerebras Provider directly
+try:
+    from g4f.Provider import Cerebras
+    CEREBRAS_PROVIDER_CLASS = Cerebras
+except ImportError:
+    print("Warning: Could not import g4f.Provider.Cerebras. Cerebras-specific provider targeting disabled.")
+    CEREBRAS_PROVIDER_CLASS = None
+
+import os
+import json
+import uuid
+from datetime import datetime
+import asyncio
+import platform
+import html # Imported html
+from dotenv import load_dotenv # Import load_dotenv
+import requests
+from bs4 import BeautifulSoup
+import csv # Import csv module
+from duckduckgo_search import DDGS # Import for web search
+import aiohttp # For Chutes AI API
+import re
+import sys
+
+
+# Load environment variables from .env file
+# Load environment variables from the application directory
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env') # Load from same directory as app.py
+load_dotenv(dotenv_path=dotenv_path)
+
+if platform.system() == 'Windows':
