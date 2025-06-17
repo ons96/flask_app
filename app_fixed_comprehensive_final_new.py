@@ -31,6 +31,16 @@ from duckduckgo_search import DDGS
 import aiohttp
 import re
 import sys
+import urllib.parse
+import time
+
+# Try to import serpapi
+try:
+    import serpapi
+    SERPAPI_AVAILABLE = True
+except ImportError:
+    SERPAPI_AVAILABLE = False
+    print("Warning: serpapi not installed, SerpAPI functionality will be disabled")
 
 # Load environment variables
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -51,6 +61,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 CHUTES_API_KEY = os.getenv("CHUTES_API_KEY")
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
+BRAVE_API_KEY = os.getenv("BRAVE_API_KEY")
 
 print(f"--- API Keys Status ---")
 print(f"GOOGLE_API_KEY: {'Loaded' if GOOGLE_API_KEY else 'Missing'}")
@@ -58,6 +69,7 @@ print(f"CEREBRAS_API_KEY: {'Loaded' if CEREBRAS_API_KEY else 'Missing'}")
 print(f"GROQ_API_KEY: {'Loaded' if GROQ_API_KEY else 'Missing'}")
 print(f"CHUTES_API_KEY: {'Loaded' if CHUTES_API_KEY else 'Missing'}")
 print(f"SERPAPI_API_KEY: {'Loaded' if SERPAPI_API_KEY else 'Missing'}")
+print(f"BRAVE_API_KEY: {'Loaded' if BRAVE_API_KEY else 'Missing'}")
 
 # Model name mappings to handle duplicates and standardize display names
 MODEL_DISPLAY_NAME_MAP = {
@@ -208,8 +220,8 @@ PROVIDER_MODEL_MAP = {
         "chutes": "anthropic/claude-3-haiku-20240307"
     },
     "Qwen 3 32B": {
-        "cerebras": "cerebras/Qwen-3-32B-Instruct",
-        "groq": "qwen-qwq-32b",
+        "cerebras": "qwen-3-32b",
+        "groq": "qwen/qwen3-32b",
         "google": "SKIP_PROVIDER",
         "chutes": "SKIP_PROVIDER"
     },
@@ -235,7 +247,191 @@ PROVIDER_PERFORMANCE_CACHE = []
 CHUTES_MODELS_CACHE = []
 GROQ_MODELS_CACHE = []
 
-DEFAULT_MAX_OUTPUT_TOKENS = 4000  # Reduced to ensure compatibility with all APIs
+DEFAULT_MAX_OUTPUT_TOKENS = 4000  # Default for most models
+REASONING_MAX_OUTPUT_TOKENS = 16384  # Higher limit for reasoning models (QwQ, Qwen3, etc.)
+
+def get_max_tokens_for_model(model_name):
+    """Determine appropriate max tokens based on model type"""
+    model_lower = model_name.lower()
+    
+    # Reasoning models that need more tokens for thinking
+    reasoning_keywords = ['qwq', 'qwen3', 'reasoning', 'thinking', 'claude-3', 'o1']
+    
+    if any(keyword in model_lower for keyword in reasoning_keywords):
+        return REASONING_MAX_OUTPUT_TOKENS
+    
+    return DEFAULT_MAX_OUTPUT_TOKENS
+
+def is_continuation_request(prompt):
+    """Check if the user is asking to continue a previous response"""
+    prompt_lower = prompt.lower().strip()
+    
+    continuation_patterns = [
+        r'\bcontinue\b',
+        r'\bfinish\b',
+        r'\bcomplete\b',
+        r'\bmore\b',
+        r'\bkeep going\b',
+        r'\bgo on\b',
+        r'\bplease continue\b',
+        r'\bcontinue (?:your )?(?:response|answer|explanation|thinking)\b',
+        r'\bfinish (?:your )?(?:response|answer|explanation|thinking)\b',
+        r'\bcomplete (?:your )?(?:response|answer|explanation|thinking)\b',
+        r'\bwhat (?:about|comes) next\b',
+        r'\band then\?\b',
+        r'\bwhat else\b'
+    ]
+    
+    return any(re.search(pattern, prompt_lower) for pattern in continuation_patterns)
+
+def build_continuation_context(chat_history, max_context_messages=5):
+    """Build context for continuation requests using recent chat history"""
+    if not chat_history or len(chat_history) < 2:
+        return None
+    
+    # Get the last few messages for context
+    recent_messages = chat_history[-max_context_messages:]
+    
+    # Find the last assistant message that might be incomplete
+    last_assistant_msg = None
+    last_user_msg = None
+    
+    for msg in reversed(chat_history):
+        if msg["role"] == "assistant" and not last_assistant_msg:
+            last_assistant_msg = msg
+        elif msg["role"] == "user" and not last_user_msg:
+            last_user_msg = msg
+        
+        if last_assistant_msg and last_user_msg:
+            break
+    
+    if last_assistant_msg and last_user_msg:
+        # Build context for continuation
+        context = f"""Previous conversation context:
+
+User's original question: {last_user_msg['content']}
+
+Your previous response (which may have been cut off): {last_assistant_msg['content']}
+
+User is now asking you to continue or complete your previous response. Please continue where you left off and provide the complete answer."""
+        
+        return context
+    
+    return None
+
+def is_response_complete(response_text, model_name):
+    """
+    Check if a response appears to be complete or cut off.
+    This is a heuristic and may not be 100% accurate.
+    """
+    if not response_text:
+        return False
+    
+    response_text = response_text.strip()
+    
+    # Check for common indicators of incomplete responses
+    incomplete_indicators = [
+        # Mid-sentence cuts
+        r'[a-z,]\s*$',  # Ends with lowercase letter or comma
+        r'\.\.\.\s*$',  # Ends with ellipsis
+        r':\s*$',       # Ends with colon
+        r'-\s*$',       # Ends with dash
+        r'and\s*$',     # Ends with "and"
+        r'or\s*$',      # Ends with "or"
+        r'but\s*$',     # Ends with "but"
+        r'however\s*$', # Ends with "however"
+        r'therefore\s*$', # Ends with "therefore"
+        r'because\s*$', # Ends with "because"
+        r'since\s*$',   # Ends with "since"
+        r'while\s*$',   # Ends with "while"
+        r'although\s*$', # Ends with "although"
+        r'for example\s*$', # Ends with "for example"
+        r'such as\s*$', # Ends with "such as"
+        r'including\s*$', # Ends with "including"
+        # Incomplete lists or enumerations
+        r'\d+\.\s*$',   # Ends with number and period (list item)
+        r'[•\-\*]\s*$', # Ends with bullet point
+        # Incomplete code blocks
+        r'```[^`]*$',   # Unclosed code block
+        r'`[^`]*$',     # Unclosed inline code
+    ]
+    
+    for pattern in incomplete_indicators:
+        if re.search(pattern, response_text, re.IGNORECASE | re.MULTILINE):
+            return False
+    
+    # For reasoning models, check for incomplete thinking blocks
+    if any(keyword in model_name.lower() for keyword in ['qwq', 'qwen3', 'reasoning', 'thinking']):
+        # Check for unclosed thinking tags or incomplete reasoning
+        if '<thinking>' in response_text and '</thinking>' not in response_text:
+            return False
+        if response_text.count('<thinking>') != response_text.count('</thinking>'):
+            return False
+    
+    # Response appears complete if it ends with proper punctuation
+    complete_endings = ['.', '!', '?', '"', "'", ')', ']', '}', '```', '</thinking>']
+    
+    return any(response_text.endswith(ending) for ending in complete_endings)
+
+def get_complete_response_with_retries(prompt, model_name, max_tokens, api_call_function, max_retries=3):
+    """
+    Attempt to get a complete response, with retries if response appears incomplete.
+    This implements the user's request to ensure complete responses before sending to user.
+    """
+    print(f"--- Attempting to get complete response for model: {model_name} ---")
+    
+    accumulated_response = ""
+    continuation_prompt = prompt
+    
+    for attempt in range(max_retries):
+        print(f"--- Response attempt {attempt + 1}/{max_retries} ---")
+        
+        try:
+            # Get response from the API
+            response = api_call_function(continuation_prompt, max_tokens)
+            
+            if not response or not response.strip():
+                print(f"--- Attempt {attempt + 1} returned empty response ---")
+                continue
+                
+            response = response.strip()
+            print(f"--- Attempt {attempt + 1} response length: {len(response)} characters ---")
+            
+            # If this is our first response, use it as-is
+            if attempt == 0:
+                accumulated_response = response
+            else:
+                # For continuation attempts, append the new content
+                accumulated_response += " " + response
+            
+            # Check if the response appears complete
+            is_complete = is_response_complete(accumulated_response, model_name)
+            print(f"--- Response appears complete: {is_complete} ---")
+            
+            if is_complete:
+                print(f"--- Complete response obtained after {attempt + 1} attempt(s) ---")
+                return accumulated_response.strip()
+            
+            # If incomplete and we have more retries, prepare continuation prompt
+            if attempt < max_retries - 1:
+                print(f"--- Response appears incomplete, preparing continuation for attempt {attempt + 2} ---")
+                
+                # Create a continuation prompt that includes the context
+                continuation_prompt = f"""Continue your previous response. Here's what you said so far:
+
+{accumulated_response}
+
+Please continue from where you left off and complete your answer to the original question: {prompt}
+
+Continue your response:"""
+                
+        except Exception as e:
+            print(f"--- Error in attempt {attempt + 1}: {e} ---")
+            continue
+    
+    # If we've exhausted all retries, return what we have
+    print(f"--- Returning response after {max_retries} attempts (may be incomplete) ---")
+    return accumulated_response.strip() if accumulated_response else None
 
 # --- Utility Functions ---
 
@@ -970,14 +1166,169 @@ async def fetch_groq_models():
 
 # --- Web Search Function ---
 
+def perform_bing_search_fallback(query, max_results=5):
+    """
+    Fallback search using Bing's public search without API key.
+    This scrapes Bing search results as a last resort.
+    """
+    results = []
+    try:
+        print(f"--- Attempting Bing fallback search for: {query} ---")
+        
+        # Encode the query for URL
+        encoded_query = urllib.parse.quote_plus(query)
+        bing_url = f"https://www.bing.com/search?q={encoded_query}&count={max_results}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(bing_url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Find search result items
+            search_results = soup.find_all('li', class_='b_algo')
+            
+            for result in search_results[:max_results]:
+                title_elem = result.find('h2')
+                snippet_elem = result.find('div', class_='b_caption')
+                
+                if title_elem and snippet_elem:
+                    title = title_elem.get_text(strip=True)
+                    snippet = snippet_elem.get_text(strip=True)
+                    
+                    # Try to get the link
+                    link_elem = title_elem.find('a')
+                    link = link_elem.get('href', '') if link_elem else ''
+                    
+                    if title and snippet:
+                        results.append({
+                            'title': title,
+                            'link': link,
+                            'snippet': snippet
+                        })
+        
+        print(f"--- Bing fallback search completed. Found {len(results)} results. ---")
+        return results
+    except Exception as e:
+        print(f"--- Bing fallback search failed: {e} ---")
+        return []
+
+def perform_brave_search(query, max_results=5):
+    """
+    Perform search using Brave Search API.
+    Brave provides 2000 free searches per month.
+    """
+    results = []
+    try:
+        print(f"--- Attempting Brave Search API for: {query} ---")
+        
+        headers = {
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip',
+            'X-Subscription-Token': BRAVE_API_KEY
+        }
+        
+        params = {
+            'q': query,
+            'count': max_results,
+            'search_lang': 'en',
+            'country': 'US',
+            'safesearch': 'moderate',
+            'result_filter': 'web'
+        }
+        
+        response = requests.get(
+            'https://api.search.brave.com/res/v1/web/search',
+            headers=headers,
+            params=params,
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if 'web' in data and 'results' in data['web']:
+                for result in data['web']['results'][:max_results]:
+                    results.append({
+                        'title': result.get('title', ''),
+                        'link': result.get('url', ''),
+                        'snippet': result.get('description', '')
+                    })
+        elif response.status_code == 429:
+            print("--- Brave Search API rate limited ---")
+        else:
+            print(f"--- Brave Search API error: {response.status_code} ---")
+        
+        print(f"--- Brave Search API completed. Found {len(results)} results. ---")
+        return results
+    except Exception as e:
+        print(f"--- Brave Search API failed: {e} ---")
+        return []
+
+def perform_google_fallback_search(query, max_results=5):
+    """
+    Fallback search using Google's public search without API key.
+    This scrapes Google search results as a last resort.
+    """
+    results = []
+    try:
+        print(f"--- Attempting Google fallback search for: {query} ---")
+        
+        # Encode the query for URL
+        encoded_query = urllib.parse.quote_plus(query)
+        google_url = f"https://www.google.com/search?q={encoded_query}&num={max_results}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(google_url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Find search result items (Google's structure)
+            search_results = soup.find_all('div', class_=['g', 'Gx5Zad'])
+            
+            for result in search_results[:max_results]:
+                # Try to find title
+                title_elem = result.find('h3')
+                if not title_elem:
+                    continue
+                    
+                title = title_elem.get_text(strip=True)
+                
+                # Try to find snippet
+                snippet_elem = result.find(['span', 'div'], class_=['st', 'VwiC3b'])
+                snippet = snippet_elem.get_text(strip=True) if snippet_elem else ''
+                
+                # Try to find link
+                link_elem = result.find('a')
+                link = link_elem.get('href', '') if link_elem else ''
+                
+                if title:
+                    results.append({
+                        'title': title,
+                        'link': link,
+                        'snippet': snippet
+                    })
+        
+        print(f"--- Google fallback search completed. Found {len(results)} results. ---")
+        return results
+    except Exception as e:
+        print(f"--- Google fallback search failed: {e} ---")
+        return []
+
 def perform_web_search(query, max_results=5):
     """
-    Perform a web search using DuckDuckGo and return summarized results.
-    Falls back to SerpApi if DuckDuckGo fails and SERPAPI_API_KEY is available.
+    Perform a web search using multiple fallback methods.
+    Tries DuckDuckGo first, then SerpAPI (if available and has credits),
+    then Brave Search API (if available), then free fallback methods (Bing, Google scraping).
     """
     results = []
     
-    # Try DuckDuckGo first
+    # Method 1: Try DuckDuckGo first (most reliable free option)
     try:
         print(f"--- Performing DuckDuckGo search for: {query} ---")
         with DDGS() as ddgs:
@@ -989,15 +1340,15 @@ def perform_web_search(query, max_results=5):
                     'snippet': result.get('body', '')
                 })
         print(f"--- DuckDuckGo search completed. Found {len(results)} results. ---")
-        return results
+        if results:
+            return results
     except Exception as e:
         print(f"--- DuckDuckGo search failed: {e} ---")
     
-    # Fallback to SerpApi if available
-    if SERPAPI_API_KEY:
+    # Method 2: Try SerpAPI if available and configured
+    if SERPAPI_API_KEY and SERPAPI_AVAILABLE:
         try:
             print(f"--- Falling back to SerpApi search for: {query} ---")
-            import serpapi
             search = serpapi.GoogleSearch({
                 "q": query,
                 "api_key": SERPAPI_API_KEY,
@@ -1005,17 +1356,46 @@ def perform_web_search(query, max_results=5):
             })
             search_results = search.get_dict()
             
-            if 'organic_results' in search_results:
+            # Check for error messages indicating quota exceeded
+            if 'error' in search_results:
+                error_message = search_results['error']
+                print(f"--- SerpAPI error: {error_message} ---")
+                if 'quota' in error_message.lower() or 'limit' in error_message.lower() or 'credit' in error_message.lower():
+                    print("--- SerpAPI quota/credits exhausted, trying other alternatives ---")
+                else:
+                    print("--- SerpAPI error, trying other alternatives ---")
+            elif 'organic_results' in search_results:
                 for result in search_results['organic_results']:
                     results.append({
                         'title': result.get('title', ''),
                         'link': result.get('link', ''),
                         'snippet': result.get('snippet', '')
                     })
-            print(f"--- SerpApi search completed. Found {len(results)} results. ---")
-            return results
+                print(f"--- SerpApi search completed. Found {len(results)} results. ---")
+                if results:
+                    return results
         except Exception as e:
-            print(f"--- SerpApi search failed: {e} ---")
+            error_str = str(e).lower()
+            if 'quota' in error_str or 'limit' in error_str or 'credit' in error_str:
+                print(f"--- SerpAPI quota/credits exhausted: {e} ---")
+            else:
+                print(f"--- SerpApi search failed: {e} ---")
+    
+    # Method 3: Try Brave Search API if available
+    if BRAVE_API_KEY:
+        results = perform_brave_search(query, max_results)
+        if results:
+            return results
+    
+    # Method 4: Try Bing fallback search (scraping)
+    results = perform_bing_search_fallback(query, max_results)
+    if results:
+        return results
+    
+    # Method 5: Try Google fallback search (scraping) as last resort
+    results = perform_google_fallback_search(query, max_results)
+    if results:
+        return results
     
     print("--- All web search methods failed. Returning empty results. ---")
     return results
@@ -1235,44 +1615,149 @@ def index():
                         "timestamp": current_time
                     })
                 
-                # Web search logic
+                # Web search logic with error handling
                 search_results_str = ""
-                if web_search_mode == 'on':
-                    print(f"--- Web search explicitly enabled for: {prompt_to_use[:50]}... ---")
-                    search_results = perform_web_search(prompt_to_use)
-                    if search_results:
-                        search_results_str = "Web search results:\n" + "\n".join([
-                            f"• {result['title']}: {result['snippet']}" for result in search_results[:3]
-                        ])
-                elif web_search_mode == 'smart':
-                    # Smart search keywords
-                    smart_keywords = [
-                        "latest", "recent", "today", "current", "now", "present", "currently",
-                        "what happened", "breaking news", "update", "who is", "what is",
-                        "current president", "current leader", "latest version", "newest"
-                    ]
-                    
-                    prompt_lower = prompt_to_use.lower()
-                    if any(keyword in prompt_lower for keyword in smart_keywords):
-                        print(f"--- Smart search triggered for: {prompt_to_use[:50]}... ---")
+                try:
+                    if web_search_mode == 'on':
+                        print(f"--- Web search explicitly enabled for: {prompt_to_use[:50]}... ---")
                         search_results = perform_web_search(prompt_to_use)
                         if search_results:
                             search_results_str = "Web search results:\n" + "\n".join([
                                 f"• {result['title']}: {result['snippet']}" for result in search_results[:3]
                             ])
+                            print(f"--- Web search (ON) found {len(search_results)} results ---")
+                        else:
+                            print("--- Web search (ON) found no results ---")
+                    elif web_search_mode == 'smart':
+                        # Enhanced smart search logic
+                        should_search = False
+                        prompt_lower = prompt_to_use.lower()
+                        
+                        # Time-sensitive keywords - clear indicators of needing current information
+                        time_keywords = [
+                            "latest", "recent", "today", "current", "now", "present", "currently",
+                            "this year", "2024", "2025", "yesterday", "last week", "this week",
+                            "breaking", "news", "update", "updated", "newest", "new", "fresh"
+                        ]
+                        
+                        # Question patterns that likely need current info (more specific)
+                        question_patterns = [
+                            "what happened", "who is the current", "who's the current", "what's the current",
+                            "current president", "current leader", "current ceo", "current price",
+                            "latest version", "latest release", "how much does", "price of",
+                            "stock price", "weather in", "time in", "population of", "who is president",
+                            "who is the president", "what is the current", "what's happening"
+                        ]
+                        
+                        # Technology and current events keywords
+                        tech_keywords = [
+                            "version", "release", "announcement", "launched", "discontinued",
+                            "merged", "acquired", "ipo", "earnings", "quarterly", "revenue"
+                        ]
+                        
+                        # Sports and entertainment keywords
+                        sports_keywords = [
+                            "score", "game", "match", "season", "championship", "winner",
+                            "standings", "tournament", "playoffs", "draft", "trade"
+                        ]
+                        
+                        # Financial and market keywords
+                        finance_keywords = [
+                            "stock", "shares", "market", "trading", "exchange rate",
+                            "crypto", "bitcoin", "inflation", "interest rate", "gdp"
+                        ]
+                        
+                        # Exclusion patterns - things that should NOT trigger search even if they contain keywords
+                        exclusion_patterns = [
+                            r'\bwhat is \d+[\+\-\*\/]\d+',  # Basic math like "what is 2+2"
+                            r'\bwhat is the capital of',     # Geography basics
+                            r'\bwhat is the meaning of life', # Philosophical questions
+                            r'\bexplain (how to|what is)',   # General explanations
+                            r'\bhow to (write|code|program|make|cook|do)', # How-to questions
+                            r'\bwhat does .* mean',          # Definition questions
+                            r'\btell me (a joke|about)',     # Entertainment requests
+                        ]
+                        
+                        # Check if query matches exclusion patterns first
+                        is_excluded = any(re.search(pattern, prompt_lower) for pattern in exclusion_patterns)
+                        
+                        if not is_excluded:
+                            # Check all keyword categories
+                            all_keywords = time_keywords + question_patterns + tech_keywords + sports_keywords + finance_keywords
+                            
+                            # Basic keyword matching
+                            if any(keyword in prompt_lower for keyword in all_keywords):
+                                should_search = True
+                        
+                        # Additional pattern-based checks
+                        if not should_search:
+                            # Check for year references (2020-2030)
+                            if re.search(r'\b(202[0-9])\b', prompt_lower):
+                                should_search = True
+                            
+                            # Check for "when did" or "when was" questions
+                            if re.search(r'\b(when (did|was|is|will)|how (long|much|many))\b', prompt_lower):
+                                should_search = True
+                            
+                            # Check for specific date patterns
+                            if re.search(r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b', prompt_lower):
+                                should_search = True
+                            
+                            # Check for company/person names that might need current info
+                            if re.search(r'\b(google|apple|microsoft|amazon|tesla|meta|facebook|twitter|x\.com|openai|anthropic|nvidia)\b', prompt_lower):
+                                should_search = True
+                        
+                        if should_search:
+                            print(f"--- Smart search triggered for: {prompt_to_use[:50]}... ---")
+                            search_results = perform_web_search(prompt_to_use)
+                            if search_results:
+                                search_results_str = "Current web search results:\n" + "\n".join([
+                                    f"• {result['title']}: {result['snippet']}" for result in search_results[:3]
+                                ])
+                                print(f"--- Smart search found {len(search_results)} results ---")
+                            else:
+                                print("--- Smart search found no results ---")
+                        else:
+                            print(f"--- Smart search: No current info needed for: {prompt_to_use[:50]}... ---")
+                except Exception as e:
+                    print(f"--- Web search error: {e} ---")
+                    search_results_str = ""  # Ensure we continue without search results
                 
                 # Get the display name and canonical name for the current model
                 display_name = MODEL_DISPLAY_NAME_MAP.get(current_model, current_model)
                 canonical_name = get_canonical_model_name(current_model)
                 
+                # Get appropriate max tokens for this model
+                max_tokens_for_model = get_max_tokens_for_model(display_name)
+                
                 # Try to call actual LLM APIs
                 response_content = None
                 provider_used = "Unknown"
                 
-                # Prepare the message for the API
+                # Check if this is a continuation request
+                is_continuation = is_continuation_request(prompt_to_use)
+                continuation_context = None
+                
+                if is_continuation:
+                    print(f"--- Detected continuation request: {prompt_to_use[:50]}... ---")
+                    continuation_context = build_continuation_context(current_chat["history"])
+                    if continuation_context:
+                        print("--- Built continuation context from chat history ---")
+                
+                # Prepare the message for the API with search results if available
                 final_prompt = prompt_to_use
-                if search_results_str:
-                    final_prompt = f"{search_results_str}\n\nUser question: {prompt_to_use}"
+                
+                if continuation_context:
+                    # Use continuation context instead of normal prompt
+                    final_prompt = continuation_context
+                elif search_results_str:
+                    # Format the prompt with search results for better LLM understanding
+                    final_prompt = f"""{search_results_str}
+
+Based on the above search results and your knowledge, please answer the following question:
+{prompt_to_use}
+
+Please provide a comprehensive answer that incorporates both the current information from the search results and relevant background knowledge."""
                 
                 # Define all available API providers to try, regardless of model
                 # Prioritize direct API providers over G4F
@@ -1391,7 +1876,10 @@ def index():
                                     else:
                                         groq_model = "llama3-70b-8192"  # Default to Llama 3
                                 elif 'qwen' in model_components['family'].lower():
-                                    groq_model = "qwen-qwq-32b"
+                                    if '3' in display_name or 'qwen3' in canonical_name.lower():
+                                        groq_model = "qwen/qwen3-32b"
+                                    else:
+                                        groq_model = "qwen-qwq-32b"  # For QwQ models
                                 
                             # Use the mapped ID if it exists, otherwise use the original selection
                             model_to_use_groq = groq_model if groq_model else current_model
@@ -1656,7 +2144,7 @@ def index():
                                             model=current_model,
                                             messages=[{"role": "user", "content": final_prompt}],
                                             provider=provider_class,
-                                            max_tokens=DEFAULT_MAX_OUTPUT_TOKENS
+                                            max_tokens=max_tokens_for_model
                                         )
                                         if response and response.strip():
                                             content_str = response.strip()
@@ -1684,7 +2172,7 @@ def index():
                                 response = ChatCompletion.create(
                                     model=current_model,
                                     messages=[{"role": "user", "content": final_prompt}],
-                                    max_tokens=DEFAULT_MAX_OUTPUT_TOKENS
+                                    max_tokens=max_tokens_for_model
                                 )
                                 if response and response.strip():
                                     content_str = response.strip()
@@ -1734,7 +2222,7 @@ def index():
                                 data = {
                                     "model": "llama3-70b-8192",  # Use a model that's definitely available on Groq
                                     "messages": [{"role": "user", "content": final_prompt}],
-                                    "max_tokens": DEFAULT_MAX_OUTPUT_TOKENS
+                                    "max_tokens": min(max_tokens_for_model, 8192)  # Respect Groq's limits
                                 }
                                 
                                 response = requests.post(
@@ -1790,7 +2278,7 @@ def index():
                                         messages=[{"role": "user", "content": final_prompt}],
                                         provider=GROQ_PROVIDER_CLASS,
                                         api_key=GROQ_API_KEY,
-                                        max_tokens=DEFAULT_MAX_OUTPUT_TOKENS
+                                        max_tokens=min(max_tokens_for_model, 8192)  # Respect Groq's limits
                                     )
                                     if emergency_response and emergency_response.strip():
                                         content_str = emergency_response.strip()
@@ -1842,6 +2330,46 @@ Please try:
 Technical details:
 {error_details_str}"""
                     provider_used = "Error - No Provider Available"
+
+                # For reasoning models, try to ensure complete response
+                if response_content and any(keyword in display_name.lower() for keyword in ['qwq', 'qwen3', 'reasoning', 'thinking']):
+                    print(f"--- Checking response completeness for reasoning model: {display_name} ---")
+                    
+                    if not is_response_complete(response_content, display_name):
+                        print("--- Response appears incomplete, attempting completion ---")
+                        
+                        # Try to get a continuation if the response is incomplete
+                        if is_continuation:
+                            # If this was already a continuation request, use the response as-is
+                            print("--- This was already a continuation request, using response as-is ---")
+                        else:
+                            # Try to get completion by making a continuation request
+                            try:
+                                completion_prompt = f"""Please continue and complete your previous response. Here's what you said:
+
+{response_content}
+
+Please continue from where you left off and provide the complete answer."""
+                                
+                                # Try to get completion (simplified, just one retry)
+                                completion_response = None
+                                
+                                # Use the same provider that worked for the original response
+                                if provider_used.startswith("Cerebras") and CEREBRAS_API_KEY:
+                                    completion_response = call_cerebras_api(current_model, completion_prompt)
+                                elif provider_used.startswith("Groq") and GROQ_API_KEY:
+                                    completion_response = call_groq_api(current_model, completion_prompt)
+                                elif provider_used.startswith("Chutes") and CHUTES_API_KEY:
+                                    completion_response = call_chutes_api(current_model, completion_prompt)
+                                
+                                if completion_response and completion_response.strip():
+                                    print("--- Successfully obtained response completion ---")
+                                    response_content = response_content + "\n\n" + completion_response.strip()
+                                else:
+                                    print("--- Could not obtain completion, using original response ---")
+                                    
+                            except Exception as completion_error:
+                                print(f"--- Error getting completion: {completion_error} ---")
 
                 # Add assistant response
                 current_time = datetime.now().isoformat()
@@ -2323,10 +2851,13 @@ def call_cerebras_api(model, prompt):
                     "Content-Type": "application/json"
                 }
                 
+                # Get max tokens for this specific model
+                model_max_tokens = get_max_tokens_for_model(cerebras_model)
+                
                 data = {
                     "model": cerebras_model.replace("cerebras/", ""),
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": DEFAULT_MAX_OUTPUT_TOKENS
+                    "max_tokens": model_max_tokens
                 }
                 
                 print(f"--- DEBUG: Cerebras API request data: {json.dumps(data)} ---")
@@ -2360,7 +2891,7 @@ def call_cerebras_api(model, prompt):
                 messages=[{"role": "user", "content": prompt}],
                 provider=CEREBRAS_PROVIDER_CLASS,
                 api_key=CEREBRAS_API_KEY,
-                max_tokens=DEFAULT_MAX_OUTPUT_TOKENS
+                max_tokens=get_max_tokens_for_model(cerebras_model)
             )
             print(f"--- DEBUG: g4f Cerebras response: {bool(response)} ---")
             return response.strip() if response and response.strip() else None
@@ -2419,10 +2950,13 @@ def call_groq_api(model, prompt):
                     "Content-Type": "application/json"
                 }
                 
+                # Get max tokens for this specific model, respecting Groq's limits
+                model_max_tokens = min(get_max_tokens_for_model(groq_model), 8192)
+                
                 data = {
                     "model": groq_model,
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": DEFAULT_MAX_OUTPUT_TOKENS
+                    "max_tokens": model_max_tokens
                 }
                 
                 print(f"--- DEBUG: Groq API request data: {json.dumps(data)} ---")
@@ -2456,7 +2990,7 @@ def call_groq_api(model, prompt):
                 messages=[{"role": "user", "content": prompt}],
                 provider=GROQ_PROVIDER_CLASS,
                 api_key=GROQ_API_KEY,
-                max_tokens=DEFAULT_MAX_OUTPUT_TOKENS
+                max_tokens=min(get_max_tokens_for_model(groq_model), 8192)
             )
             print(f"--- DEBUG: g4f Groq response: {bool(response)} ---")
             return response.strip() if response and response.strip() else None
@@ -2576,7 +3110,7 @@ async def call_chutes_api(model, prompt):
             body = {
                 "model": chutes_model,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": DEFAULT_MAX_OUTPUT_TOKENS,
+                "max_tokens": get_max_tokens_for_model(chutes_model),
                 "stream": False
             }
             
