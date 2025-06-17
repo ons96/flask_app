@@ -140,3 +140,16 @@ cython_debug/
 # User-specific temporary folders found in project
 flask_session/
 har_and_cookies/
+
+# Additional sensitive files
+*.key
+*.pem
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+config_local.py
+secrets.json
+api_keys.txt
+chats/
+data/private/
