@@ -255,7 +255,7 @@ def get_max_tokens_for_model(model_name):
     model_lower = model_name.lower()
     
     # Reasoning models that need more tokens for thinking
-    reasoning_keywords = ['qwq', 'qwen3', 'reasoning', 'thinking', 'claude-3', 'o1']
+    reasoning_keywords = ['qwq', 'qwen3', 'qwen 3', 'reasoning', 'thinking', 'claude-3', 'claude 3', 'o1']
     
     if any(keyword in model_lower for keyword in reasoning_keywords):
         return REASONING_MAX_OUTPUT_TOKENS
@@ -278,7 +278,7 @@ def is_continuation_request(prompt):
         r'\bfinish (?:your )?(?:response|answer|explanation|thinking)\b',
         r'\bcomplete (?:your )?(?:response|answer|explanation|thinking)\b',
         r'\bwhat (?:about|comes) next\b',
-        r'\band then\?\b',
+        r'\band then\?\s*$',
         r'\bwhat else\b'
     ]
     
@@ -351,9 +351,9 @@ def is_response_complete(response_text, model_name):
         # Incomplete lists or enumerations
         r'\d+\.\s*$',   # Ends with number and period (list item)
         r'[•\-\*]\s*$', # Ends with bullet point
-        # Incomplete code blocks
-        r'```[^`]*$',   # Unclosed code block
-        r'`[^`]*$',     # Unclosed inline code
+        # Incomplete code blocks (but not complete ones)
+        r'```(?!.*```\s*$)[^`]*$',   # Unclosed code block (doesn't end with ```)
+        r'`[^`]*[^`]\s*$',           # Unclosed inline code (not ending with `)
     ]
     
     for pattern in incomplete_indicators:
@@ -368,8 +368,12 @@ def is_response_complete(response_text, model_name):
         if response_text.count('<thinking>') != response_text.count('</thinking>'):
             return False
     
-    # Response appears complete if it ends with proper punctuation
+    # Response appears complete if it ends with proper punctuation or formatting
     complete_endings = ['.', '!', '?', '"', "'", ')', ']', '}', '```', '</thinking>']
+    
+    # Special check for code blocks - if it contains ``` and ends with ```, it's complete
+    if '```' in response_text and response_text.strip().endswith('```'):
+        return True
     
     return any(response_text.endswith(ending) for ending in complete_endings)
 
