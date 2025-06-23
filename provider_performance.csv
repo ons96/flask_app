@@ -1,4 +1,6 @@
 provider_name_scraped,model_name_scraped,context_window,intelligence_index,response_time_s,tokens_per_s,source_url,last_updated_utc,is_free_source
+Groq,Qwen3 32B,128000,44.0,2.5,800.0,,2025-05-31 01:04:59,true
+Chutes,Qwen3 32B,131000,44.0,3.0,750.0,,2025-05-31 01:04:59,true
 Cerebras,Llama 3.3 70B,33000,41.0,0.41,2493.0,,2025-05-31 01:04:59,true
 SambaNova,Llama 3.2 1B,16000,10.0,0.42,2232.6,,2025-05-31 01:04:59,true
 Cerebras,Llama 4 Scout,32000,43.0,0.42,2620.0,,2025-05-31 01:04:59,true

@@ -15,7 +15,7 @@ from app_fixed_comprehensive_final_new import (
     is_response_complete,
     perform_web_search,
     perform_brave_search,
-    CANONICAL_MODEL_MAPPING
+    PROVIDER_MODEL_MAP
 )
 
 def test_qwen3_model_mapping():
@@ -23,7 +23,7 @@ def test_qwen3_model_mapping():
     print("=== Testing Qwen3 32B Model Mapping ===")
     
     # Check the model mapping
-    qwen3_mapping = CANONICAL_MODEL_MAPPING.get("Qwen 3 32B", {})
+    qwen3_mapping = PROVIDER_MODEL_MAP.get("Qwen 3 32B", {})
     
     print(f"Qwen 3 32B mapping: {qwen3_mapping}")
     
