@@ -42,6 +42,10 @@ except ImportError:
     SERPAPI_AVAILABLE = False
     print("Warning: serpapi not installed, SerpAPI functionality will be disabled")
 
+# Initialize empty dictionaries to avoid NameError issues during Flask restarts
+PROVIDER_MODEL_MAP = {}
+MODEL_PROVIDER_MAP = {}
+
 # Load environment variables
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 load_dotenv(dotenv_path=dotenv_path)
@@ -62,9 +66,17 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 CHUTES_API_KEY = os.getenv("CHUTES_API_KEY")
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
 BRAVE_API_KEY = os.getenv("BRAVE_API_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
-DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY")
+# New ISH API - uses free API key
+ISH_API_KEY = "free"
+
+# Import ISH Client
+try:
+    from ish_client import ISHFinalClient
+    ish_client = ISHFinalClient()
+    print("✅ ISH API Client initialized successfully")
+except ImportError as e:
+    print(f"❌ Failed to import ISH client: {e}")
+    ish_client = None
 
 print(f"--- API Keys Status ---")
 print(f"GOOGLE_API_KEY: {'Loaded' if GOOGLE_API_KEY else 'Missing'}")
@@ -73,9 +85,7 @@ print(f"GROQ_API_KEY: {'Loaded' if GROQ_API_KEY else 'Missing'}")
 print(f"CHUTES_API_KEY: {'Loaded' if CHUTES_API_KEY else 'Missing'}")
 print(f"SERPAPI_API_KEY: {'Loaded' if SERPAPI_API_KEY else 'Missing'}")
 print(f"BRAVE_API_KEY: {'Loaded' if BRAVE_API_KEY else 'Missing'}")
-print(f"OPENROUTER_API_KEY: {'Loaded' if OPENROUTER_API_KEY else 'Missing'}")
-print(f"TOGETHER_API_KEY: {'Loaded' if TOGETHER_API_KEY else 'Missing'}")
-print(f"DEEPINFRA_API_KEY: {'Loaded' if DEEPINFRA_API_KEY else 'Missing'}")
+print(f"ISH_API_KEY: {'Loaded' if ISH_API_KEY else 'Missing'}")
 
 # Model name mappings to handle duplicates and standardize display names
 MODEL_DISPLAY_NAME_MAP = {
@@ -144,9 +154,6 @@ MODEL_DISPLAY_NAME_MAP = {
     # Keep different parameter sizes separate
     "qwen/qwen3-32b": "Qwen 3 32B",
     "qwen/qwen3-235b-a22b": "Qwen 3 235B A22B",
-    "qwen-3-235b": "Qwen 3 235B A22B",
-    "Qwen 3 235B (Reasoning)": "Qwen 3 235B A22B",
-    "Qwen 3 235B": "Qwen 3 235B A22B",
     "Qwen 3 32B": "Qwen 3 32B", 
     "Qwen 3 235B A22B": "Qwen 3 235B A22B"
 }
@@ -154,14 +161,13 @@ MODEL_DISPLAY_NAME_MAP = {
 # API Configuration
 CHUTES_API_URL = "https://llm.chutes.ai/v1"
 GROQ_API_URL = "https://api.groq.com/openai/v1"
+ISH_API_URL = "https://chatgpt.loves-being-a.dev/v1"
 PROVIDER_PERFORMANCE_URL = "https://artificialanalysis.ai/leaderboards/providers"
 
 # Performance data paths
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PERFORMANCE_CSV_PATH = os.path.join(APP_DIR, "provider_performance.csv")
 LLM_LEADERBOARD_PATH = os.path.join("Coding Projects", "LLM-Performance-Leaderboard", "llm_leaderboard_20250521_013630.csv")
-# Persisted provider model lists
-CEREBRAS_MODELS_JSON_PATH = os.path.join(APP_DIR, "cerebras_models.json")
 
 print(f"--- Performance CSV path: {PERFORMANCE_CSV_PATH} ---")
 
@@ -171,7 +177,8 @@ PROVIDER_MODEL_MAP = {
     "Llama 4 Maverick": {
         "cerebras": "cerebras/llama-4-maverick-17b-16e-instruct",
         "groq": "meta-llama/llama-4-maverick-17b-128e-instruct",
-        "chutes": "meta-llama/llama-4-7b-maverick"
+        "chutes": "meta-llama/llama-4-7b-maverick",
+        "ish": "llama-4-maverick"
     },
     "Llama 4 Scout": {
         "cerebras": "cerebras/llama-4-scout-17b-16e-instruct",
@@ -251,13 +258,10 @@ PROVIDER_MODEL_MAP = {
         "chutes": "SKIP_PROVIDER"
     },
     "Qwen 3 235B A22B": {
-        "cerebras": "AUTO_DISCOVER",
+        "cerebras": "SKIP_PROVIDER",
         "groq": "SKIP_PROVIDER",
         "google": "SKIP_PROVIDER",
-        "chutes": "SKIP_PROVIDER",
-        "openrouter": "qwen/qwen3-235b-a22b",
-        "together": "AUTO_DISCOVER",
-        "deepinfra": "AUTO_DISCOVER"
+        "chutes": "SKIP_PROVIDER"
     },
     "Qwen 3 72B": {
         "cerebras": "SKIP_PROVIDER",
@@ -267,8 +271,20 @@ PROVIDER_MODEL_MAP = {
     },
     "Qwen-3-Coder-480B": {
         "cerebras": "Qwen-3-Coder-480B"
+    },
+    "Grok-4": {
+        "ish": "grok-4"
+    },
+    "GPT-4": {
+        "ish": "gpt-4"
+    },
+    "Claude 3.5 Sonnet (ISH)": {
+        "ish": "claude-3-5-sonnet"
     }
 }
+
+# Create alias for backward compatibility
+MODEL_PROVIDER_MAP = PROVIDER_MODEL_MAP
 
 # Global caches
 CACHED_AVAILABLE_MODELS_SORTED_LIST = []
@@ -277,10 +293,312 @@ CACHED_PROVIDER_CLASS_MAP = {}
 PROVIDER_PERFORMANCE_CACHE = []
 CHUTES_MODELS_CACHE = []
 GROQ_MODELS_CACHE = []
-CEREBRAS_MODELS_CACHE = []
-OPENROUTER_MODELS_CACHE = []
-TOGETHER_MODELS_CACHE = []
-DEEPINFRA_MODELS_CACHE = []
+ISH_MODELS_CACHE = []
+
+def fetch_ish_models():
+    """Fetch available models from ISH API using our ISH client."""
+    global ISH_MODELS_CACHE
+    
+    if ISH_MODELS_CACHE:
+        print(f"--- Using cached ISH models: {len(ISH_MODELS_CACHE)} models ---")
+        return ISH_MODELS_CACHE
+    
+    try:
+        print("--- Fetching ISH models using ISH client ---")
+        
+        if ish_client is None:
+            print("❌ ISH client not available")
+            return []
+        
+        # Get working models from our ISH client
+        working_models = ish_client.get_working_models()
+        models = [model['id'] for model in working_models]
+        
+        # If no working models, use fallback models
+        if not models:
+            models = ["deepseek-chat", "deepseek-v3", "deepseek-reasoner"]
+            print(f"--- Using fallback ISH models: {models} ---")
+        
+        ISH_MODELS_CACHE = models
+        print(f"--- Successfully fetched {len(models)} ISH models ---")
+        print(f"--- ISH models: {models[:10]}{'...' if len(models) > 10 else ''} ---")
+        return models
+            
+    except Exception as e:
+        print(f"--- Error fetching ISH models: {e} ---")
+        # Return fallback models on error
+        fallback_models = ["deepseek-chat", "deepseek-v3", "deepseek-reasoner"]
+        ISH_MODELS_CACHE = fallback_models
+        return fallback_models
+
+def is_response_truncated(response_text):
+    """Check if a response appears to be truncated/cut off."""
+    if not response_text:
+        return False
+    
+    response_text = response_text.strip()
+    
+    # If response is very short, it's likely complete
+    if len(response_text) < 50:
+        return False
+    
+    # Strong indicators that response is complete
+    completion_indicators = [
+        # Ends with clear conclusion phrases
+        response_text.lower().endswith(('hope this helps', 'let me know if', 'feel free to ask', 
+                                       'any questions', 'happy to help', 'good luck', 'best regards',
+                                       'thank you', 'you\'re welcome', 'that should do it')),
+        # Ends with summary phrases
+        response_text.lower().endswith(('in summary', 'in conclusion', 'to summarize', 
+                                       'overall', 'finally', 'in the end')),
+        # Multiple complete sentences (likely complete)
+        response_text.count('.') >= 3 and response_text.endswith('.'),
+    ]
+    
+    # If we have strong completion indicators, consider it complete
+    if any(completion_indicators):
+        return False
+    
+    # Common indicators of truncation
+    truncation_indicators = [
+        # Explicit truncation markers
+        response_text.endswith('...'),
+        response_text.endswith('..'),
+        # Ends with incomplete code blocks
+        response_text.count('```') % 2 != 0,
+        # Ends with incomplete lists (but only if it's clearly a list item)
+        (response_text.endswith(('-', '*', '1.', '2.', '3.', '4.', '5.')) and 
+         response_text.split('\n')[-1].strip().startswith(('-', '*', '1.', '2.', '3.', '4.', '5.'))),
+        # Very abrupt ending patterns (but be more conservative)
+        (response_text.endswith((' and', ' or', ' but', ' so', ' the', ' a', ' an', ' to', ' for', ' with', ' in', ' on', ' at')) and
+         len(response_text.split()[-1]) <= 3),  # Only if the last word is very short
+        # Ends mid-sentence without punctuation (but be more conservative)
+        (not response_text.endswith(('.', '!', '?', '"', "'", ')', ']', '}', '`', ':', ';')) and
+         len(response_text) > 200 and  # Only for longer responses
+         not response_text.split('\n')[-1].strip().startswith(('#', '-', '*', '1.', '2.', '3.'))),  # Not if it's a heading or list
+    ]
+    
+    # Count how many truncation indicators we have
+    truncation_count = sum(truncation_indicators)
+    
+    # Only consider truncated if we have multiple indicators or one very strong one
+    if response_text.endswith('...') or response_text.count('```') % 2 != 0:
+        return True  # Strong indicators
+    
+    return truncation_count >= 2  # Need multiple weaker indicators
+
+def call_api_with_continuation(api_function, model, messages, max_continuations=3, provider_name="API"):
+    """Generic function to call any API with automatic response continuation for truncated responses."""
+    import time
+    
+    try:
+        full_response = ""
+        continuation_count = 0
+        rate_limit_retries = 0
+        max_rate_limit_retries = 10
+        base_delay = 2  # Start with 2 second delay
+        
+        while continuation_count <= max_continuations:
+            if continuation_count == 0:
+                # First call - use original messages
+                current_messages = messages
+                print(f"--- {provider_name}: Initial call for {model} ---")
+            else:
+                # Continuation call - use smart context management
+                continuation_prompt = f"""Continue your previous response. Here's what you said so far:
+
+{full_response[-2000:]}  
+
+Please continue from where you left off and complete your answer:"""
+                
+                current_messages = [{"role": "user", "content": continuation_prompt}]
+                print(f"--- {provider_name}: Continuation call {continuation_count} for {model} ---")
+            
+            # Retry loop for rate limits
+            while rate_limit_retries <= max_rate_limit_retries:
+                try:
+                    # Make the API call
+                    if provider_name == "Chutes API" and hasattr(api_function, '__call__'):
+                        # Handle async function
+                        import asyncio
+                        try:
+                            response_part = asyncio.run(api_function(model, current_messages))
+                        except RuntimeError:
+                            # Already in event loop
+                            loop = asyncio.get_event_loop()
+                            response_part = loop.run_until_complete(api_function(model, current_messages))
+                    else:
+                        response_part = api_function(model, current_messages)
+                    
+                    # Check for rate limit or error responses
+                    if response_part and response_part.strip():
+                        response_lower = response_part.lower().strip()
+                        
+                        # Check for rate limit indicators
+                        rate_limit_indicators = [
+                            "rate limit", "rate_limit", "too many requests", "quota exceeded",
+                            "rate exceeded", "try again later", "429", "throttled"
+                        ]
+                        
+                        if any(indicator in response_lower for indicator in rate_limit_indicators):
+                            rate_limit_retries += 1
+                            if rate_limit_retries <= max_rate_limit_retries:
+                                delay = base_delay * (2 ** min(rate_limit_retries - 1, 4))  # Exponential backoff, max 32s
+                                print(f"--- {provider_name}: Rate limit detected, waiting {delay}s before retry {rate_limit_retries}/{max_rate_limit_retries} ---")
+                                time.sleep(delay)
+                                continue
+                            else:
+                                print(f"--- {provider_name}: Max rate limit retries exceeded, giving up ---")
+                                return full_response.strip() if full_response else None
+                        
+                        # Check for context limit indicators
+                        context_limit_indicators = [
+                            "context length", "context_length", "token limit", "too long",
+                            "maximum context", "context exceeded", "input too large"
+                        ]
+                        
+                        if any(indicator in response_lower for indicator in context_limit_indicators):
+                            print(f"--- {provider_name}: Context limit reached, using shorter continuation prompt ---")
+                            # Try with much shorter context
+                            if continuation_count > 0:
+                                short_continuation = f"Continue: {full_response[-500:]}"
+                                current_messages = [{"role": "user", "content": short_continuation}]
+                                continue
+                            else:
+                                print(f"--- {provider_name}: Context limit on initial call, cannot continue ---")
+                                return None
+                    
+                    # Success - break out of rate limit retry loop
+                    break
+                    
+                except Exception as api_error:
+                    error_str = str(api_error).lower()
+                    if any(indicator in error_str for indicator in ["rate", "limit", "quota", "429", "throttle"]):
+                        rate_limit_retries += 1
+                        if rate_limit_retries <= max_rate_limit_retries:
+                            delay = base_delay * (2 ** min(rate_limit_retries - 1, 4))
+                            print(f"--- {provider_name}: Rate limit exception, waiting {delay}s before retry {rate_limit_retries}/{max_rate_limit_retries} ---")
+                            time.sleep(delay)
+                            continue
+                        else:
+                            print(f"--- {provider_name}: Max rate limit retries exceeded after exception ---")
+                            return full_response.strip() if full_response else None
+                    else:
+                        # Non-rate-limit error, re-raise
+                        raise api_error
+            
+            # Check if we got a valid response
+            if not response_part or not response_part.strip():
+                print(f"--- {provider_name}: No response received on attempt {continuation_count + 1} ---")
+                break
+            
+            response_part = response_part.strip()
+            
+            # Check again for error responses that got through
+            response_lower = response_part.lower()
+            error_indicators = [
+                "error:", "failed:", "cannot", "unable to", "sorry, i can't",
+                "i cannot", "i'm unable", "not possible", "try again"
+            ]
+            
+            if any(indicator in response_lower for indicator in error_indicators) and len(response_part) < 100:
+                print(f"--- {provider_name}: Received error response: {response_part[:100]} ---")
+                break
+            
+            # Merge responses
+            if continuation_count == 0:
+                full_response = response_part
+            else:
+                # Smart merging - avoid duplication
+                if response_part.startswith(full_response[-50:]):
+                    # Remove duplicate beginning
+                    overlap_len = len(full_response[-50:])
+                    response_part = response_part[overlap_len:]
+                
+                full_response = full_response.rstrip() + " " + response_part
+            
+            # Check if response appears complete (only if we got substantial content)
+            if len(response_part) > 50 and not is_response_truncated(response_part):
+                print(f"--- {provider_name}: Response appears complete after {continuation_count + 1} calls ---")
+                break
+            
+            # Only continue if we got substantial content and it appears truncated
+            if len(response_part) < 20:
+                print(f"--- {provider_name}: Response too short ({len(response_part)} chars), stopping continuation ---")
+                break
+                
+            print(f"--- {provider_name}: Response appears truncated, attempting continuation {continuation_count + 1} ---")
+            continuation_count += 1
+            rate_limit_retries = 0  # Reset rate limit counter for next continuation
+        
+        if continuation_count > 0:
+            print(f"--- {provider_name}: Final response assembled from {continuation_count + 1} calls ---")
+        
+        return full_response.strip() if full_response else None
+        
+    except Exception as e:
+        print(f"--- {provider_name} continuation error: {e} ---")
+        return full_response.strip() if full_response else None
+
+def call_ish_api_with_continuation(model, messages, max_continuations=3):
+    """Call ISH API with automatic response continuation for truncated responses."""
+    return call_api_with_continuation(call_ish_api_single, model, messages, max_continuations, "ISH API")
+
+def call_ish_api_single(model, messages):
+    """Single ISH API call without continuation logic."""
+    try:
+        # Find the provider-specific model ID
+        ish_model = find_provider_specific_model(model, "ish")
+        
+        if ish_model != model:
+            print(f"--- Using ISH-specific model ID: {ish_model} (for {model}) ---")
+        
+        headers = {
+            "Content-Type": "application/json",
+            "fr33-api-key": ISH_API_KEY
+        }
+        
+        data = {
+            "model": ish_model,
+            "messages": messages,
+            "temperature": 0.7,
+            "stream": True
+        }
+        
+        response = requests.post(f"{ISH_API_URL}/chat/completions", 
+                               headers=headers, json=data, stream=True, timeout=30)
+        
+        if response.status_code == 200:
+            accumulated_response = ""
+            for line in response.iter_lines():
+                if line:
+                    try:
+                        decoded_line = line.decode('utf-8')
+                        if decoded_line.startswith("data:"):
+                            json_content = decoded_line[5:].strip()  # Remove "data:" prefix
+                            if json_content == "[DONE]":
+                                break  # End of stream
+                            try:
+                                chunk = json.loads(json_content)
+                                if 'choices' in chunk and len(chunk['choices']) > 0:
+                                    delta = chunk['choices'][0]['delta']
+                                    if 'content' in delta:
+                                        accumulated_response += delta['content']
+                                    elif 'reasoning_content' in delta:
+                                        accumulated_response += delta['reasoning_content']
+                            except json.JSONDecodeError:
+                                continue  # Skip malformed JSON chunks
+                    except Exception:
+                        continue  # Skip problematic lines
+            
+            return accumulated_response.strip() if accumulated_response else None
+        else:
+            print(f"--- ISH API error: Status {response.status_code} ---")
+            return None
+            
+    except Exception as e:
+        print(f"--- ISH API error: {e} ---")
+        return None
 
 def build_smart_context_messages(chat_history, current_message, model_name):
     # Smart context management for chat history
@@ -560,7 +878,6 @@ def parse_model_name(model_name):
         "Qwen 3 32B": {"family": "qwen", "version": "3", "variant": "instruct", "size_b": 32.0},
         "Qwen 3 32B (Reasoning)": {"family": "qwen", "version": "3", "variant": "reasoning", "size_b": 32.0},
         "Qwen3 32B (Reasoning)": {"family": "qwen", "version": "3", "variant": "reasoning", "size_b": 32.0},
-        "Qwen3 235B 2507 (Non-reasoning)": {"family": "qwen", "version": "3", "variant": "2507", "size_b": 235.0},
         "Llama 3.3 70B": {"family": "llama", "version": "3.3", "variant": "instruct", "size_b": 70.0},
         "Llama 3.3 8B": {"family": "llama", "version": "3.3", "variant": "instruct", "size_b": 8.0}
     }
@@ -615,8 +932,8 @@ def parse_model_name(model_name):
     base_variant = None
     is_reasoning = False
     
-    # Check for reasoning first - but exclude "non-reasoning"
-    if re.search(r'reasoning', normalized) and not re.search(r'non-reasoning', normalized):
+    # Check for reasoning first
+    if re.search(r'reasoning', normalized):
         is_reasoning = True
     
     # Check for base variants (flash, pro, etc.)
@@ -810,10 +1127,9 @@ def has_free_api_provider(model_name, provider_name):
     
     # Known free providers (case-insensitive)
     free_providers = {
-        'cerebras', 'groq', 'chutes', 'openrouter', 
+        'cerebras', 'groq', 'chutes', 'ish', 'openrouter', 
         'sambanova', 'deepinfra', 'together', 'cohere', 'github models',
-        'cloudflare workers ai', 'nvidia nim', 'mistral', 'huggingface',
-        'openai compatible', 'openai', 'hyperbolic', 'fireworks', 'replicate'
+        'cloudflare workers ai', 'nvidia nim', 'mistral', 'huggingface'
     }
     
     provider_lower = provider_name.lower().strip()
@@ -834,19 +1150,6 @@ def has_free_api_provider(model_name, provider_name):
     if 'g4f' in provider_lower:
         return True
     
-    # Special cases for specific models that are known to be available via free APIs
-    model_lower = model_name.lower()
-    
-    # Qwen models are available through various free providers
-    if 'qwen' in model_lower:
-        if any(keyword in provider_lower for keyword in ['together', 'deepinfra', 'huggingface', 'replicate']):
-            return True
-    
-    # gpt-oss models are typically available through open source providers
-    if 'gpt-oss' in model_lower:
-        if any(keyword in provider_lower for keyword in ['openai', 'together', 'deepinfra', 'huggingface']):
-            return True
-    
     return False
 
 def get_provider_priority(provider_name):
@@ -862,11 +1165,13 @@ def get_provider_priority(provider_name):
     elif 'cerebras' in provider_lower:
         return 2
     
-    # Tier 2: Good direct APIs (Chutes/Google)
+    # Tier 2: Good direct APIs (Chutes/Google/ISH)
     elif 'chutes' in provider_lower:
         return 3
-    elif 'google' in provider_lower:
+    elif 'ish' in provider_lower:
         return 4
+    elif 'google' in provider_lower:
+        return 5
     
     # Tier 3: Other providers (accessed through G4F or with limitations)
     elif 'sambanova' in provider_lower:
@@ -1128,23 +1433,18 @@ def load_performance_from_csv(csv_path=PERFORMANCE_CSV_PATH):
 
 def get_available_models_with_provider_counts():
     """
-    Returns models sorted by performance/time ratio as requested by user.
+    Returns sorted models with the specific ordering logic requested:
+    1. Priority section: Start with fastest free model, add next fastest models that have higher intelligence OR same intelligence with larger context
+    2. Gemini section: Apply same logic but only to Google AI Studio Gemini models (providers containing 'Google' and 'AI Studio' but not 'Vertex')
+    3. Remaining models: Add all remaining free models at the bottom, sorted by response time
     
-    Logic:
-    1. Scrape data from artificial analysis
-    2. Calculate performance_ratio = intelligence_index / response_time_s
-    3. Sort models by performance_ratio (high to low)
-    4. Priority section: Start with first model with free API (preferably Cerebras)
-    5. Add subsequent models with free API where intelligence >= previous model's intelligence
-    6. Add remaining free API models at the bottom
-    7. Special: Always include Google AI Studio models (regardless of logic)
+    For Gemini models in the Gemini section, only Google AI Studio providers are included in the provider list.
     """
     global PROVIDER_PERFORMANCE_CACHE
+    import re
     
-    # Build performance entries with ratio calculation
+    # Build performance entries from cache
     perf_entries = []
-    google_ai_studio_entries = []  # Special handling for Google AI Studio
-    
     for entry in PROVIDER_PERFORMANCE_CACHE:
         model_name = entry.get('model_name_scraped', '').strip()
         provider_name = entry.get('provider_name_scraped', '').strip()
@@ -1153,120 +1453,235 @@ def get_available_models_with_provider_counts():
 
         intelligence_index = entry.get('intelligence_index', 0)
         response_time_s = entry.get('response_time_s', float('inf'))
-        
-        # Check if this is a Google AI Studio model (always include these)
-        is_google_ai_studio = is_google_ai_studio_provider(provider_name)
-        
-        # For Google AI Studio models, be more lenient with data requirements
-        if is_google_ai_studio:
-            # Accept models with any intelligence index, use reasonable defaults
-            if intelligence_index <= 0:
-                intelligence_index = 30  # Default intelligence for Google models
-            if response_time_s == float('inf'):
-                response_time_s = 2.0  # Default response time
-            
-            google_ai_studio_entries.append({
-                'model': model_name,
-                'provider': provider_name,
-                'intelligence_index': intelligence_index,
-                'response_time_s': response_time_s,
-                'performance_ratio': intelligence_index / max(response_time_s, 0.1),
-                'context_window_str': entry.get('context_window', ''),
-                'is_free': True,  # Google AI Studio is always considered free
-                'is_google_ai_studio': True
-            })
-        else:
-            # Skip entries without valid data for non-Google providers
-            if intelligence_index <= 0 or response_time_s == float('inf'):
-                continue
-                
-            # Calculate performance/time ratio
-            performance_ratio = intelligence_index / max(response_time_s, 0.1)
-            
-            is_free = has_free_api_provider(model_name, provider_name)
-            if not is_free:
-                continue
-                
-            perf_entries.append({
-                'model': model_name,
-                'provider': provider_name,
-                'intelligence_index': intelligence_index,
-                'response_time_s': response_time_s,
-                'performance_ratio': performance_ratio,
-                'context_window_str': entry.get('context_window', ''),
-                'is_free': is_free,
-                'is_google_ai_studio': False
-            })
-    
-    # Sort by performance ratio (high to low)
-    perf_entries.sort(key=lambda x: x['performance_ratio'], reverse=True)
-    google_ai_studio_entries.sort(key=lambda x: x['performance_ratio'], reverse=True)
-    
-    print(f"--- Processing {len(perf_entries)} valid free models + {len(google_ai_studio_entries)} Google AI Studio models for ordering ---")
-    
-    # Apply user's requested logic for non-Google models
-    priority_models = []
-    if perf_entries:
-        # Find first model with free API provider (preferably Cerebras)
-        cerebras_models = [e for e in perf_entries if 'cerebras' in e['provider'].lower()]
-        first_model = cerebras_models[0] if cerebras_models else perf_entries[0]
-        
-        priority_models.append(first_model)
-        threshold_intelligence = first_model['intelligence_index']
-        
-        print(f"--- Starting with model: {first_model['model']} "
-              f"(provider: {first_model['provider']}, ratio: {first_model['performance_ratio']:.2f}, "
-              f"intelligence: {threshold_intelligence}) ---")
-        
-        # Add subsequent models meeting intelligence threshold
-        for entry in perf_entries:
-            if (entry not in priority_models and 
-                entry['intelligence_index'] >= threshold_intelligence):
-                priority_models.append(entry)
-                print(f"--- Added to priority: {entry['model']} "
-                      f"(provider: {entry['provider']}, ratio: {entry['performance_ratio']:.2f}, "
-                      f"intelligence: {entry['intelligence_index']}) ---")
-    
-    # Add remaining free models
-    remaining_models = [e for e in perf_entries if e not in priority_models]
-    
-    # Combine: priority models + Google AI Studio models + remaining models
-    final_models = priority_models + google_ai_studio_entries + remaining_models
-    
-    print(f"--- Final ordering: {len(priority_models)} priority models, "
-          f"{len(google_ai_studio_entries)} Google AI Studio models, "
-          f"{len(remaining_models)} remaining models ---")
-    
-    # Format for return - aggregate by canonical model name
+        context_window_str = entry.get('context_window', '')
+
+        try:
+            context_window_size = parse_context_window(context_window_str)
+        except:
+            context_window_size = 0
+
+        is_free = has_free_api_provider(model_name, provider_name)
+        provider_priority = get_provider_priority(provider_name)
+
+        perf_entries.append({
+            'model': model_name,
+            'provider': provider_name,
+            'intelligence_index': intelligence_index,
+            'response_time_s': response_time_s,
+            'context_window_size': context_window_size,
+            'is_free': is_free,
+            'provider_priority': provider_priority,
+            'is_google_ai_studio': is_google_ai_studio_provider(provider_name),
+            'is_gemini': is_gemini_model(model_name)
+        })
+
+    # Aggregate models using our intelligent model name parser
     model_aggregation = {}
-    for entry in final_models:
-        canonical_name = get_canonical_model_name(entry['model'])
-        
-        if canonical_name not in model_aggregation:
-            model_aggregation[canonical_name] = {
-                'providers': [entry['provider']],
+    
+    for entry in perf_entries:
+        if not entry['is_free']:
+            continue
+
+        model_name = entry['model']
+        provider_name = entry['provider']
+
+        # Generate a canonical model name
+        canonical_name = get_canonical_model_name(model_name)
+
+        # Extract model components for grouping
+        model_components = parse_model_name(model_name)
+
+        # Create a unique key based on family, version, variant, and size
+        model_key = (
+            model_components['family'],
+            model_components['version'],
+            model_components['variant'],
+            model_components['size_b']
+        )
+
+        if model_key not in model_aggregation:
+            model_aggregation[model_key] = {
+                'display_name': canonical_name,
+                'providers': {provider_name},
                 'intelligence_index': entry['intelligence_index'],
                 'response_time_s': entry['response_time_s'],
-                'is_google_ai_studio': entry.get('is_google_ai_studio', False)
+                'context_window_size': entry['context_window_size'],
+                'best_model_name': model_name,
+                'best_provider_priority': entry['provider_priority'],
+                'original_model_names': {model_name},  # Track all original names
+                'has_google_ai_studio': entry['is_google_ai_studio'],
+                'is_gemini': entry['is_gemini']
             }
         else:
-            model_aggregation[canonical_name]['providers'].append(entry['provider'])
-            # If this is a Google AI Studio model, mark the aggregation as such
-            if entry.get('is_google_ai_studio', False):
-                model_aggregation[canonical_name]['is_google_ai_studio'] = True
+            # Update with better metrics, prioritizing better providers
+            existing = model_aggregation[model_key]
+            existing['providers'].add(provider_name)
+            existing['original_model_names'].add(model_name)
+            
+            # Update Google AI Studio and Gemini flags
+            if entry['is_google_ai_studio']:
+                existing['has_google_ai_studio'] = True
+            if entry['is_gemini']:
+                existing['is_gemini'] = True
+
+            # Prefer entries with better performance first, then provider priority as tiebreaker
+            is_better = (
+                entry['response_time_s'] < existing['response_time_s'] or
+                (entry['response_time_s'] == existing['response_time_s'] and
+                 (entry['intelligence_index'] > existing['intelligence_index'] or
+                  (entry['intelligence_index'] == existing['intelligence_index'] and
+                   entry['provider_priority'] < existing['best_provider_priority'])))
+            )
+
+            if is_better:
+                existing.update({
+                    'intelligence_index': entry['intelligence_index'],
+                    'response_time_s': entry['response_time_s'],
+                    'context_window_size': entry['context_window_size'],
+                    'best_model_name': model_name,
+                    'best_provider_priority': entry['provider_priority']
+                })
+
+    # Convert to list of free models
+    free_models = list(model_aggregation.values())
     
-    # Format output
+    # Filter out models with invalid response times
+    valid_models = [m for m in free_models if m['response_time_s'] != float('inf')]
+    
+    if not valid_models:
+        print("--- Warning: No models with valid response times found ---")
+        return [], {}, {}
+    
+    # Sort all models by response time (fastest first)
+    valid_models.sort(key=lambda x: x['response_time_s'])
+    
+    print(f"--- Processing {len(valid_models)} valid free models for ordering ---")
+    
+    # STEP 1: Priority section - Start with the fastest model (lowest response_time_s)
+    priority_models = []
+    remaining_models = valid_models.copy()
+    
+    if remaining_models:
+        fastest_model = remaining_models.pop(0)  # Remove from remaining list
+        priority_models.append(fastest_model)
+        
+        current_intelligence = fastest_model['intelligence_index']
+        current_context = fastest_model['context_window_size']
+        
+        print(f"--- Starting with fastest model: {fastest_model['display_name']} "
+              f"(speed: {fastest_model['response_time_s']}s, intelligence: {current_intelligence}, "
+              f"context: {current_context}) ---")
+        
+        # Iterate through remaining models by speed, adding those that qualify
+        models_to_remove = []
+        
+        for model in remaining_models:
+            # Check if this model qualifies for priority section
+            qualifies = (
+                model['intelligence_index'] > current_intelligence or
+                (model['intelligence_index'] == current_intelligence and 
+                 model['context_window_size'] > current_context)
+            )
+            
+            if qualifies:
+                priority_models.append(model)
+                models_to_remove.append(model)
+                
+                # Update current thresholds
+                current_intelligence = model['intelligence_index']
+                current_context = model['context_window_size']
+                
+                print(f"--- Added to priority: {model['display_name']} "
+                      f"(speed: {model['response_time_s']}s, intelligence: {current_intelligence}, "
+                      f"context: {current_context}) ---")
+        
+        # Remove priority models from remaining list
+        for model in models_to_remove:
+            remaining_models.remove(model)
+    
+    # STEP 2: Gemini section - Apply same logic to Google AI Studio Gemini models
+    # Exclude Gemini 1.5 models (they go to remaining models section)
+    gemini_models = []
+    gemini_candidates = [m for m in remaining_models if m.get('is_gemini', False) and m.get('has_google_ai_studio', False) and not m['display_name'].startswith('Gemini 1.5')]
+    
+    if gemini_candidates:
+        # Sort Gemini candidates by response time
+        gemini_candidates.sort(key=lambda x: x['response_time_s'])
+        
+        # Start with fastest Gemini model
+        fastest_gemini = gemini_candidates.pop(0)
+        gemini_models.append(fastest_gemini)
+        remaining_models.remove(fastest_gemini)
+        
+        current_gemini_intelligence = fastest_gemini['intelligence_index']
+        current_gemini_context = fastest_gemini['context_window_size']
+        
+        print(f"--- Starting Gemini section with: {fastest_gemini['display_name']} "
+              f"(speed: {fastest_gemini['response_time_s']}s, intelligence: {current_gemini_intelligence}, "
+              f"context: {current_gemini_context}) ---")
+        
+        # Iterate through remaining Gemini candidates
+        gemini_models_to_remove = []
+        
+        for model in gemini_candidates:
+            # Check if this Gemini model qualifies
+            qualifies = (
+                model['intelligence_index'] > current_gemini_intelligence or
+                (model['intelligence_index'] == current_gemini_intelligence and 
+                 model['context_window_size'] > current_gemini_context)
+            )
+            
+            if qualifies:
+                gemini_models.append(model)
+                gemini_models_to_remove.append(model)
+                
+                # Update current thresholds
+                current_gemini_intelligence = model['intelligence_index']
+                current_gemini_context = model['context_window_size']
+                
+                print(f"--- Added to Gemini section: {model['display_name']} "
+                      f"(speed: {model['response_time_s']}s, intelligence: {current_gemini_intelligence}, "
+                      f"context: {current_gemini_context}) ---")
+        
+        # Remove selected Gemini models from remaining list
+        for model in gemini_models_to_remove:
+            remaining_models.remove(model)
+    
+    # STEP 3: Add all remaining free models at the bottom, sorted by response time
+    remaining_models.sort(key=lambda x: x['response_time_s'])
+    
+    # Combine: priority models first, then Gemini models, then remaining models
+    final_models = priority_models + gemini_models + remaining_models
+    
+    print(f"--- Final ordering: {len(priority_models)} priority models, "
+          f"{len(gemini_models)} Gemini models, {len(remaining_models)} remaining models ---")
+    
+    # Prepare output format
     sorted_models = []
     model_provider_info = {}
-    
-    for canonical_name, info in model_aggregation.items():
-        provider_count = len(info['providers'])
-        intelligence_index = info['intelligence_index']
-        response_time_s = info['response_time_s']
+    for model in final_models:
+        display_name = model['display_name']
         
-        sorted_models.append((canonical_name, provider_count, intelligence_index, response_time_s))
-        model_provider_info[canonical_name] = info['providers']
-    
+        # For Gemini models in the Gemini section, only include Google AI Studio providers
+        if model in gemini_models and model.get('has_google_ai_studio', False):
+            # Filter providers to only include Google AI Studio ones
+            google_ai_studio_providers = [p for p in model['providers'] if is_google_ai_studio_provider(p)]
+            if google_ai_studio_providers:
+                provider_count = len(google_ai_studio_providers)
+                model_provider_info[display_name] = google_ai_studio_providers
+            else:
+                # Fallback to all providers if no Google AI Studio found
+                provider_count = len(model['providers'])
+                model_provider_info[display_name] = list(model['providers'])
+        else:
+            provider_count = len(model['providers'])
+            model_provider_info[display_name] = list(model['providers'])
+        
+        intelligence_index = model['intelligence_index']
+        response_time_s = model['response_time_s']
+
+        sorted_models.append((display_name, provider_count, intelligence_index, response_time_s))
+
     return sorted_models, model_provider_info, {}
 
 # --- External API Functions ---
@@ -1274,46 +1689,6 @@ def get_available_models_with_provider_counts():
 async def fetch_chutes_models():
     """Fetch available models from Chutes AI API."""
     global CHUTES_MODELS_CACHE
-
-async def fetch_cerebras_models():
-    """Fetch available models from Cerebras API and persist them to JSON."""
-    global CEREBRAS_MODELS_CACHE
-    if not CEREBRAS_API_KEY:
-        print("--- Warning: CEREBRAS_API_KEY not found. Skipping Cerebras model fetch. ---")
-        return []
-    try:
-        headers = {"Authorization": f"Bearer {CEREBRAS_API_KEY}", "Content-Type": "application/json"}
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.cerebras.ai/v1/models", headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    models = data.get('data', [])
-                    CEREBRAS_MODELS_CACHE = [m.get('id', '') for m in models if m.get('id')]
-                    print(f"--- Successfully fetched {len(CEREBRAS_MODELS_CACHE)} models from Cerebras ---")
-                    # Persist full JSON for mapping/reference
-                    try:
-                        with open(CEREBRAS_MODELS_JSON_PATH, 'w', encoding='utf-8') as f:
-                            json.dump(models, f, indent=2)
-                        print(f"--- Saved Cerebras models to {CEREBRAS_MODELS_JSON_PATH} ---")
-                    except Exception as w:
-                        print(f"--- Warning: Could not write {CEREBRAS_MODELS_JSON_PATH}: {w} ---")
-                    return CEREBRAS_MODELS_CACHE
-                else:
-                    print(f"--- Cerebras API error: {response.status} ---")
-                    return []
-    except Exception as e:
-        print(f"--- Error fetching Cerebras models: {e} ---")
-        # Attempt to load from existing JSON if available
-        try:
-            if os.path.exists(CEREBRAS_MODELS_JSON_PATH):
-                with open(CEREBRAS_MODELS_JSON_PATH, 'r', encoding='utf-8') as f:
-                    models = json.load(f)
-                    CEREBRAS_MODELS_CACHE = [m.get('id', '') for m in models if isinstance(m, dict) and m.get('id')]
-                    print(f"--- Loaded {len(CEREBRAS_MODELS_CACHE)} Cerebras models from cache ---")
-                    return CEREBRAS_MODELS_CACHE
-        except Exception as r:
-            print(f"--- Warning: Could not load cached Cerebras models: {r} ---")
-        return []
     
     if not CHUTES_API_KEY:
         print("--- Warning: CHUTES_API_KEY not found. Skipping Chutes model fetch. ---")
@@ -1368,157 +1743,6 @@ async def fetch_groq_models():
     except Exception as e:
         print(f"--- Error fetching Groq models: {e} ---")
         return []
-
-async def fetch_openrouter_models():
-    """Fetch available models from OpenRouter API."""
-    global OPENROUTER_MODELS_CACHE
-    if not OPENROUTER_API_KEY:
-        print("--- Warning: OPENROUTER_API_KEY not found. Skipping OpenRouter model fetch. ---")
-        return []
-    try:
-        headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://openrouter.ai/api/v1/models", headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    models = data.get('data', [])
-                    OPENROUTER_MODELS_CACHE = [m.get('id', '') for m in models if m.get('id')]
-                    print(f"--- Successfully fetched {len(OPENROUTER_MODELS_CACHE)} models from OpenRouter ---")
-                    return OPENROUTER_MODELS_CACHE
-                else:
-                    print(f"--- OpenRouter API error: {response.status} ---")
-                    return []
-    except Exception as e:
-        print(f"--- Error fetching OpenRouter models: {e} ---")
-        return []
-
-async def fetch_together_models():
-    """Fetch available models from Together API."""
-    global TOGETHER_MODELS_CACHE
-    if not TOGETHER_API_KEY:
-        print("--- Warning: TOGETHER_API_KEY not found. Skipping Together model fetch. ---")
-        return []
-    try:
-        headers = {"Authorization": f"Bearer {TOGETHER_API_KEY}", "Content-Type": "application/json"}
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.together.xyz/v1/models", headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    models = data.get('data', [])
-                    TOGETHER_MODELS_CACHE = [m.get('id', '') for m in models if m.get('id')]
-                    print(f"--- Successfully fetched {len(TOGETHER_MODELS_CACHE)} models from Together ---")
-                    return TOGETHER_MODELS_CACHE
-                else:
-                    print(f"--- Together API error: {response.status} ---")
-                    return []
-    except Exception as e:
-        print(f"--- Error fetching Together models: {e} ---")
-        return []
-
-async def fetch_deepinfra_models():
-    """Fetch available models from DeepInfra API (OpenAI-compatible)."""
-    global DEEPINFRA_MODELS_CACHE
-    if not DEEPINFRA_API_KEY:
-        print("--- Warning: DEEPINFRA_API_KEY not found. Skipping DeepInfra model fetch. ---")
-        return []
-    try:
-        headers = {"Authorization": f"Bearer {DEEPINFRA_API_KEY}", "Content-Type": "application/json"}
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.deepinfra.com/v1/openai/models", headers=headers) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    models = data.get('data', [])
-                    DEEPINFRA_MODELS_CACHE = [m.get('id', '') for m in models if m.get('id')]
-                    print(f"--- Successfully fetched {len(DEEPINFRA_MODELS_CACHE)} models from DeepInfra ---")
-                    return DEEPINFRA_MODELS_CACHE
-                else:
-                    print(f"--- DeepInfra API error: {response.status} ---")
-                    return []
-    except Exception as e:
-        print(f"--- Error fetching DeepInfra models: {e} ---")
-        return []
-
-# --- Additional Direct Provider Calls ---
-
-def call_openrouter_api(model, messages):
-    """Call OpenRouter API (OpenAI-compatible) with message history."""
-    try:
-        if not OPENROUTER_API_KEY:
-            return None
-        url = "https://openrouter.ai/api/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": get_max_tokens_for_model(model)
-        }
-        resp = requests.post(url, headers=headers, json=data, timeout=60)
-        if resp.status_code == 200:
-            jd = resp.json()
-            return jd.get("choices", [{}])[0].get("message", {}).get("content")
-        else:
-            print(f"--- OpenRouter API error {resp.status_code}: {resp.text[:200]} ---")
-            return None
-    except Exception as e:
-        print(f"--- OpenRouter API exception: {e} ---")
-        return None
-
-
-def call_together_api(model, messages):
-    """Call Together API (OpenAI-compatible) with message history."""
-    try:
-        if not TOGETHER_API_KEY:
-            return None
-        url = "https://api.together.xyz/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {TOGETHER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": get_max_tokens_for_model(model)
-        }
-        resp = requests.post(url, headers=headers, json=data, timeout=60)
-        if resp.status_code == 200:
-            jd = resp.json()
-            return jd.get("choices", [{}])[0].get("message", {}).get("content")
-        else:
-            print(f"--- Together API error {resp.status_code}: {resp.text[:200]} ---")
-            return None
-    except Exception as e:
-        print(f"--- Together API exception: {e} ---")
-        return None
-
-
-def call_deepinfra_api(model, messages):
-    """Call DeepInfra API (OpenAI-compatible) with message history."""
-    try:
-        if not DEEPINFRA_API_KEY:
-            return None
-        url = "https://api.deepinfra.com/v1/openai/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {DEEPINFRA_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": get_max_tokens_for_model(model)
-        }
-        resp = requests.post(url, headers=headers, json=data, timeout=60)
-        if resp.status_code == 200:
-            jd = resp.json()
-            return jd.get("choices", [{}])[0].get("message", {}).get("content")
-        else:
-            print(f"--- DeepInfra API error {resp.status_code}: {resp.text[:200]} ---")
-            return None
-    except Exception as e:
-        print(f"--- DeepInfra API exception: {e} ---")
-        return None
 
 # --- Web Search Function ---
 
@@ -1791,6 +2015,17 @@ def initialize_model_cache():
     print("--- [STARTUP] Initializing model cache... ---")
     
     try:
+        # Fetch ISH models first to add them to the model mappings
+        ish_models = fetch_ish_models()
+        
+        # Add discovered ISH models to PROVIDER_MODEL_MAP dynamically
+        for ish_model in ish_models:
+            # Create a display name for the model
+            display_name = ish_model.replace('-', ' ').title()
+            if display_name not in PROVIDER_MODEL_MAP:
+                PROVIDER_MODEL_MAP[display_name] = {"ish": ish_model}
+                print(f"--- Added ISH model: {display_name} -> {ish_model} ---")
+        
         sorted_models, provider_info, provider_class_map = get_available_models_with_provider_counts()
         CACHED_AVAILABLE_MODELS_SORTED_LIST = sorted_models
         CACHED_MODEL_PROVIDER_INFO = provider_info
@@ -1823,12 +2058,8 @@ else:
 # --- Fetch External Models ---
 print("--- [MODULE LOAD] Fetching external models... ---")
 try:
-    asyncio.run(fetch_cerebras_models())
     asyncio.run(fetch_chutes_models())
     asyncio.run(fetch_groq_models())
-    asyncio.run(fetch_openrouter_models())
-    asyncio.run(fetch_together_models())
-    asyncio.run(fetch_deepinfra_models())
 except Exception as e:
     print(f"--- [MODULE LOAD] Error fetching external models: {e} ---")
 
@@ -1852,6 +2083,24 @@ def index():
     
     # Use cached model data
     available_models_sorted_list = CACHED_AVAILABLE_MODELS_SORTED_LIST
+    
+    # If no models cached, try to initialize again
+    if not available_models_sorted_list:
+        print("--- No cached models found, reinitializing... ---")
+        initialize_model_cache()
+        available_models_sorted_list = CACHED_AVAILABLE_MODELS_SORTED_LIST
+    
+    # Fallback to basic models if still empty
+    if not available_models_sorted_list:
+        print("--- Using fallback model list ---")
+        available_models_sorted_list = [
+            ("Grok-4", 1, 85, 2.5),
+            ("GPT-4", 1, 90, 3.0),
+            ("Claude 3.5 Sonnet (ISH)", 1, 88, 2.8),
+            ("Llama 4 Maverick", 2, 82, 2.2),
+            ("Gemini 2.5 Flash", 1, 85, 1.8)
+        ]
+    
     available_model_names = {name for name, _, _, _ in available_models_sorted_list}
     
     # Set default model
@@ -2150,7 +2399,7 @@ Please provide a comprehensive answer that incorporates both the current informa
                 
                 # Separate direct API providers from G4F providers
                 for provider in model_providers:
-                    if any(api_name in provider.lower() for api_name in ['cerebras', 'groq', 'google', 'chutes', 'openrouter', 'together', 'deepinfra']):
+                    if any(api_name in provider.lower() for api_name in ['cerebras', 'groq', 'google', 'chutes']):
                         direct_api_providers.append(provider)
                     else:
                         g4f_providers.append(provider)
@@ -2181,8 +2430,12 @@ Please provide a comprehensive answer that incorporates both the current informa
                             # Use the mapped ID if it exists, otherwise use the original selection
                             model_to_use_cerebras = cerebras_model if cerebras_model else current_model
                             
+                            # Ensure the model name is in the correct format for Cerebras
+                            if not model_to_use_cerebras.startswith("cerebras/") and not "/" in model_to_use_cerebras:
+                                model_to_use_cerebras = f"cerebras/{model_to_use_cerebras}"
+                                
                             print(f"--- Attempting Cerebras API for {display_name} using model: {model_to_use_cerebras} ---")
-                            response_content = call_cerebras_api(model_to_use_cerebras, messages_for_api)
+                            response_content = call_api_with_continuation(call_cerebras_api, model_to_use_cerebras, messages_for_api, 3, "Cerebras API")
                             
                             # Validate response content
                             if response_content and response_content.strip():
@@ -2262,7 +2515,7 @@ Please provide a comprehensive answer that incorporates both the current informa
                             model_to_use_groq = groq_model if groq_model else current_model
                             
                             print(f"--- Attempting Groq API for {display_name} using model: {model_to_use_groq} ---")
-                            response_content = call_groq_api(model_to_use_groq, messages_for_api)
+                            response_content = call_api_with_continuation(call_groq_api, model_to_use_groq, messages_for_api, 3, "Groq API")
                             
                             # Validate response content
                             if response_content and response_content.strip():
@@ -2342,7 +2595,7 @@ Please provide a comprehensive answer that incorporates both the current informa
                                 actual_model_id = google_model
                             
                             print(f"--- Attempting Google AI for {display_name} using model: {actual_model_id} ---")
-                            response_content = call_google_api(actual_model_id, messages_for_api)
+                            response_content = call_api_with_continuation(call_google_api, actual_model_id, messages_for_api, 3, "Google API")
                             
                             # Validate response content
                             if response_content and response_content.strip():
@@ -2434,14 +2687,14 @@ Please provide a comprehensive answer that incorporates both the current informa
                                 print(f"--- Attempting Chutes AI for {display_name} using model: {chutes_model_to_try} ---")
                                 
                                 try:
-                                    response_content = asyncio.run(call_chutes_api(chutes_model_to_try, messages_for_api))
+                                    response_content = call_api_with_continuation(call_chutes_api, chutes_model_to_try, messages_for_api, 3, "Chutes API")
                                 except RuntimeError as e:
                                     if "cannot run nested event loops" in str(e):
                                         # This happens if Flask/Gunicorn/Uvicorn is already running an event loop.
                                         # Try running in the existing loop.
                                         print("--- Detected existing event loop. Running Chutes call within it. ---")
                                         loop = asyncio.get_event_loop()
-                                        response_content = loop.run_until_complete(call_chutes_api(chutes_model_to_try, messages_for_api))
+                                        response_content = loop.run_until_complete(call_api_with_continuation(call_chutes_api, chutes_model_to_try, messages_for_api, 3, "Chutes API"))
                                     else:
                                         raise  # Re-raise other runtime errors
                                 
@@ -2484,55 +2737,58 @@ Please provide a comprehensive answer that incorporates both the current informa
                         print(f"--- {error_msg} ---")
                         response_content = None
                 
-                # Try OpenRouter API
-                if OPENROUTER_API_KEY and not response_content:
+                # Try ISH API if available and no response yet
+                if not response_content and ISH_API_KEY:
+                    provider_name_for_attempt = "ISH API"
+                    attempted_direct_providers.append("ish")
+                    
                     try:
-                        # Try exact model ID first
-                        mapped = find_provider_specific_model(current_model, "openrouter")
-                        model_to_try = mapped if mapped and mapped != "SKIP_PROVIDER" else current_model
-                        print(f"--- Attempting OpenRouter API using model: {model_to_try} ---")
-                        response_content = call_openrouter_api(model_to_try, messages_for_api)
-                        if response_content and response_content.strip():
-                            provider_used = "OpenRouter"
-                            print("--- Provider OpenRouter succeeded! ---")
+                        # Check if this model has ISH support
+                        ish_model = find_provider_specific_model(display_name, "ish")
+                        
+                        if ish_model and ish_model != "SKIP_PROVIDER":
+                            print(f"--- Attempting ISH API for {display_name} using model: {ish_model} ---")
+                            response_content = call_ish_api_with_continuation(ish_model, messages_for_api)
+                            
+                            # Validate response content
+                            if response_content and response_content.strip():
+                                content_str = response_content.strip()
+                                low = content_str.lower()
+                                if not (low.startswith("error:") or low.startswith("you have reached") or 
+                                        "challenge error" in low or "rate limit" in low or 
+                                        "no provider found" in low or "no providers found" in low or 
+                                        "context_length_exceeded" in low or "request entity too large" in low or 
+                                        "model_not_found" in low or "token" in low):
+                                    provider_used = provider_name_for_attempt
+                                    print(f"--- Provider {provider_name_for_attempt} succeeded! ---")
+                                else:
+                                    error_msg = f"Provider {provider_name_for_attempt} returned error string: {content_str}"
+                                    print(f"--- {error_msg} ---")
+                                    provider_errors[provider_name_for_attempt] = content_str
+                                    response_content = None
+                            else:
+                                error_msg = f"Provider {provider_name_for_attempt} returned empty response."
+                                print(f"--- {error_msg} ---")
+                                provider_errors[provider_name_for_attempt] = "Returned empty response"
+                                response_content = None
                         else:
-                            response_content = None
+                            print(f"--- Skipping ISH API for {display_name} (no matching model found) ---")
+                            provider_errors[provider_name_for_attempt] = "No matching model found"
                     except Exception as e:
-                        print(f"--- OpenRouter error: {e} ---")
-                        response_content = None
-
-                # Try Together API
-                if TOGETHER_API_KEY and not response_content:
-                    try:
-                        mapped = find_provider_specific_model(current_model, "together")
-                        model_to_try = mapped if mapped and mapped != "SKIP_PROVIDER" else current_model
-                        print(f"--- Attempting Together API using model: {model_to_try} ---")
-                        response_content = call_together_api(model_to_try, messages_for_api)
-                        if response_content and response_content.strip():
-                            provider_used = "Together"
-                            print("--- Provider Together succeeded! ---")
+                        error_msg_str = str(e).lower()
+                        if ("rate_limit_exceeded" in error_msg_str and ("tokens" in error_msg_str or "tpm" in error_msg_str)) or \
+                           ("request entity too large" in error_msg_str) or \
+                           ("context_length_exceeded" in error_msg_str) or \
+                           ("token limit" in error_msg_str) or \
+                           (("quota" in error_msg_str or "limit" in error_msg_str) and "token" in error_msg_str):
+                            error_msg = f"Provider ISH API failed due to request size/token limit: {e}"
+                            provider_errors["ISH API"] = f"Request size/token limit exceeded: {str(e)}"
                         else:
-                            response_content = None
-                    except Exception as e:
-                        print(f"--- Together error: {e} ---")
+                            error_msg = f"Provider ISH API failed: {e}"
+                            provider_errors["ISH API"] = str(e)
+                        print(f"--- {error_msg} ---")
                         response_content = None
-
-                # Try DeepInfra API
-                if DEEPINFRA_API_KEY and not response_content:
-                    try:
-                        mapped = find_provider_specific_model(current_model, "deepinfra")
-                        model_to_try = mapped if mapped and mapped != "SKIP_PROVIDER" else current_model
-                        print(f"--- Attempting DeepInfra API using model: {model_to_try} ---")
-                        response_content = call_deepinfra_api(model_to_try, messages_for_api)
-                        if response_content and response_content.strip():
-                            provider_used = "DeepInfra"
-                            print("--- Provider DeepInfra succeeded! ---")
-                        else:
-                            response_content = None
-                    except Exception as e:
-                        print(f"--- DeepInfra error: {e} ---")
-                        response_content = None
-
+                
                 # Fallback to G4F only if no direct API worked
                 if not response_content:
                     try:
@@ -2552,6 +2808,8 @@ Please provide a comprehensive answer that incorporates both the current informa
                             if "google" in provider_key and "google" in attempted_direct_providers: 
                                 continue
                             if "chutes" in provider_key and "chutes" in attempted_direct_providers: 
+                                continue
+                            if "ish" in provider_key and "ish" in attempted_direct_providers: 
                                 continue
                             filtered_providers.append(p_id)
                         
@@ -2782,11 +3040,13 @@ Please continue from where you left off and provide the complete answer."""
                                 
                                 # Use the same provider that worked for the original response
                                 if provider_used.startswith("Cerebras") and CEREBRAS_API_KEY:
-                                    completion_response = call_cerebras_api(current_model, [{"role": "user", "content": completion_prompt}])
+                                    completion_response = call_api_with_continuation(call_cerebras_api, current_model, [{"role": "user", "content": completion_prompt}], 3, "Cerebras API")
                                 elif provider_used.startswith("Groq") and GROQ_API_KEY:
-                                    completion_response = call_groq_api(current_model, [{"role": "user", "content": completion_prompt}])
+                                    completion_response = call_api_with_continuation(call_groq_api, current_model, [{"role": "user", "content": completion_prompt}], 3, "Groq API")
                                 elif provider_used.startswith("Chutes") and CHUTES_API_KEY:
-                                    completion_response = asyncio.run(call_chutes_api(current_model, [{"role": "user", "content": completion_prompt}]))
+                                    completion_response = call_api_with_continuation(call_chutes_api, current_model, [{"role": "user", "content": completion_prompt}], 3, "Chutes API")
+                                elif provider_used.startswith("ISH") and ISH_API_KEY:
+                                    completion_response = call_ish_api_with_continuation(current_model, [{"role": "user", "content": completion_prompt}])
                                 
                                 if completion_response and completion_response.strip():
                                     print("--- Successfully obtained response completion ---")
@@ -2869,6 +3129,18 @@ Please continue from where you left off and provide the complete answer."""
                              <div style="white-space: pre-wrap; word-wrap: break-word;">{content_display}</div>
                            </div>'''
     
+    # Debug: Check if we have models
+    print(f"--- DEBUG: available_models_sorted_list has {len(available_models_sorted_list)} models ---")
+    if not available_models_sorted_list:
+        print("--- WARNING: No models found, using emergency fallback ---")
+        available_models_sorted_list = [
+            ("Grok-4", 1, 85, 2.5),
+            ("GPT-4", 1, 90, 3.0),
+            ("Claude 3.5 Sonnet (ISH)", 1, 88, 2.8),
+            ("Llama 4 Maverick", 2, 82, 2.2),
+            ("Gemini 2.5 Flash", 1, 85, 1.8)
+        ]
+    
     # Prepare model dropdown options with performance scores
     model_options_html = ''
     seen_display_names = set()
@@ -2884,7 +3156,7 @@ Please continue from where you left off and provide the complete answer."""
         
         seen_display_names.add(display_name)
         
-        # Check if this model is selected
+        # Check if this model is selected  
         current_display = MODEL_DISPLAY_NAME_MAP.get(current_model, current_model)
         is_selected = (model_name == current_model or display_name == current_display)
         selected_attr = "selected" if is_selected else ""
@@ -2900,6 +3172,19 @@ Please continue from where you left off and provide the complete answer."""
             perf_str = " (N/A)"
         
         model_options_html += f'<option value="{model_name}" {selected_attr}>{display_name}{perf_str}</option>'
+    
+    # Debug: Check final HTML
+    print(f"--- DEBUG: Generated {len(model_options_html)} chars of model options HTML ---")
+    print(f"--- DEBUG: First 200 chars of HTML: {model_options_html[:200]} ---")
+    if not model_options_html.strip():
+        print("--- EMERGENCY: No model options generated, adding manual fallback ---")
+        model_options_html = '''
+            <option value="Grok-4" selected>Grok-4 (85, 2.5s)</option>
+            <option value="GPT-4">GPT-4 (90, 3.0s)</option>
+            <option value="Claude 3.5 Sonnet (ISH)">Claude 3.5 Sonnet (ISH) (88, 2.8s)</option>
+            <option value="Llama 4 Maverick">Llama 4 Maverick (82, 2.2s)</option>
+        '''
+        print(f"--- DEBUG: Using emergency fallback HTML: {model_options_html} ---")
     
     # Navigation and controls
     nav_links_html = f'''
@@ -2930,28 +3215,33 @@ Please continue from where you left off and provide the complete answer."""
 <html>
 <head>
     <title>Enhanced LLM Chat Interface</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #fff; font-size: 14px; }}
-        #top-controls {{ padding: 8px; background-color: #f8f9fa; border-bottom: 1px solid #ccc; }}
-        #message-container {{ overflow-y: auto; padding: 10px; margin-bottom: 10px; height: 300px; border: 1px solid #ddd; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0 0 50px 0; background-color: #fff; min-height: 100vh; display: flex; flex-direction: column; }}
+        #top-controls {{ position: sticky; top: 0; padding: 8px; background-color: #f8f9fa; border-bottom: 1px solid #ccc; z-index: 100; }}
+        #message-container {{ flex: 1; overflow-y: auto; padding: 5px 10px; margin-bottom: 10px; min-height: 50vh; max-height: 60vh; padding-top: 15px; }}
         .message {{ margin-bottom: 15px; }}
-        .user-message {{ background-color: #f0f8ff; padding: 10px; border-left: 3px solid #007bff; }}
-        .assistant-message {{ background-color: #f9f9f9; padding: 10px; border-left: 3px solid #28a745; }}
-        #controls-container {{ background-color: #f8f9fa; border-top: 1px solid #ddd; }}
-        #model-selector {{ padding: 10px; background-color: #f8f9fa; }}
-        #input-area {{ padding: 10px; background-color: #f8f9fa; }}
-        textarea {{ width: 100%; box-sizing: border-box; height: 60px; font-size: 14px; margin-bottom: 8px; padding: 8px; border: 1px solid #ccc; font-family: Arial, sans-serif; }}
-        select {{ width: 100%; padding: 6px; font-size: 14px; border: 1px solid #ccc; box-sizing: border-box; }}
-        input[type="submit"], button {{ padding: 8px 12px; font-size: 14px; border: 1px solid #ccc; cursor: pointer; margin-right: 5px; }}
-        .button-row {{ margin-top: 8px; }}
-        .button-row input {{ background-color: #007bff; color: white; border-color: #007bff; }}
+        .user-message {{ background-color: #f0f8ff; padding: 10px 12px; border-radius: 8px; border-left: 3px solid #007bff; }}
+        .assistant-message {{ background-color: #f9f9f9; padding: 10px 12px; border-radius: 8px; border-left: 3px solid #28a745; }}
+        #controls-container {{ position: sticky; bottom: 0; z-index: 90; background-color: #f8f9fa; border-top: 1px solid #ddd; }}
+        #model-selector {{ padding: 5px 10px; background-color: #f8f9fa; position: relative; z-index: 1000; }}
+        #input-area {{ padding: 10px 10px 15px 10px; background-color: #f8f9fa; margin-bottom: 10px; }}
+        textarea {{ width: 100%; box-sizing: border-box; height: 60px; font-size: 1em; margin-bottom: 8px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: inherit; }}
+        select {{ width: 100%; padding: 6px; margin: 0; font-size: 0.95em; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; position: relative; z-index: 1000; }}
+        select:focus {{ z-index: 1001; }}
+        select option {{ background-color: white; padding: 8px; color: black; }}
+        #model-selector {{ position: relative; z-index: 1000; }}
+        input[type="submit"], button {{ padding: 12px; font-size: 1.1em; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; min-height: 48px; }}
+        .button-row {{ display: flex; gap: 10px; margin-top: 5px; }}
+        .button-row input {{ flex-grow: 1; background-color: #007bff; color: white; border-color: #007bff; }}
         .button-row input[name="regenerate"] {{ background-color: #fd7e14; border-color: #fd7e14; color: white; }}
+        .button-row input:hover {{ opacity: 0.9; }}
         label {{ vertical-align: middle; }}
         input[type="radio"] {{ vertical-align: middle; margin-right: 2px; }}
-        .nav-links {{ margin-bottom: 10px; }}
-        .nav-links a, .nav-links button {{ text-decoration: none; padding: 6px 12px; background-color: #e7e7e7; border: 1px solid #ccc; color: #333; }}
-        .web-search-controls {{ margin-bottom: 8px; font-size: 13px; }}
+        .nav-links {{ display: flex; justify-content: space-between; margin: 0; align-items: center; }}
+        .nav-links a, .nav-links button {{ text-decoration: none; transition: background-color 0.2s; padding: 6px 12px; height: 32px; line-height: 20px; }}
+        .nav-links a:hover, .nav-links button:hover {{ background-color: #d3d3d3; }}
+        .web-search-controls {{ margin: 0 0 5px 0; font-size: 0.85em; }}
     </style>
 </head>
 <body>
@@ -2963,7 +3253,8 @@ Please continue from where you left off and provide the complete answer."""
     
     <div id="controls-container">
         <div id="model-selector">
-            <select name="model" form="chat-form">{model_options_html}</select>
+            <label for="model-select" style="display: block; margin-bottom: 3px; font-weight: bold; color: #333;">Select Model:</label>
+            <select id="model-select" name="model" form="chat-form" style="background-color: white; border: 2px solid #007bff;">{model_options_html}</select>
         </div>
         
         <div id="input-area">
@@ -2981,34 +3272,28 @@ Please continue from where you left off and provide the complete answer."""
     </div>
     
     <script>
+        // Auto-resize textarea
+        const textarea = document.querySelector('textarea');
+        textarea.addEventListener('input', function() {{
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+        }});
+        
         // Scroll the message container to the bottom when the page loads
-        function scrollToBottom() {{
-            var messageContainer = document.getElementById('message-container');
-            if (messageContainer) {{
-                messageContainer.scrollTop = messageContainer.scrollHeight;
+        window.addEventListener('load', function() {{
+            const messageContainer = document.getElementById('message-container');
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+            
+            // Add padding at the bottom on mobile to prevent controls from being hidden
+            if (window.innerHeight < 600) {{
+                document.body.style.paddingBottom = '30px';
             }}
-        }}
+        }});
         
         // Focus on the textarea when the page loads
-        function focusTextarea() {{
-            var textarea = document.getElementsByTagName('textarea')[0];
-            if (textarea) {{
-                textarea.focus();
-            }}
-        }}
-        
-        // Simple onload handler for older browsers
-        if (window.addEventListener) {{
-            window.addEventListener('load', function() {{
-                scrollToBottom();
-                focusTextarea();
-            }});
-        }} else if (window.attachEvent) {{
-            window.attachEvent('onload', function() {{
-                scrollToBottom();
-                focusTextarea();
-            }});
-        }}
+        window.addEventListener('load', function() {{
+            document.querySelector('textarea').focus();
+        }});
     </script>
 </body>
 </html>'''
@@ -3100,27 +3385,20 @@ def find_provider_specific_model(model_name, provider_name):
     if model_name in PROVIDER_MODEL_MAP and provider_name.lower() in PROVIDER_MODEL_MAP[model_name]:
         result = PROVIDER_MODEL_MAP[model_name][provider_name.lower()]
         print(f"--- Found exact model mapping for {model_name} on {provider_name}: {result} ---")
-        # Handle AUTO_DISCOVER sentinel by continuing to discovery instead of returning
-        if isinstance(result, str) and result.upper() == "AUTO_DISCOVER":
-            result = None
         # For Cerebras, ensure we return the correct model name format
-        if result and provider_name.lower() == "cerebras" and not result.startswith("SKIP"):
+        if provider_name.lower() == "cerebras" and result and not result.startswith("SKIP"):
             return result
-        if result:
-            return result
+        return result
     
     # Then check using the display name mapping
     display_name = MODEL_DISPLAY_NAME_MAP.get(model_name, model_name)
     if display_name in PROVIDER_MODEL_MAP and provider_name.lower() in PROVIDER_MODEL_MAP[display_name]:
         result = PROVIDER_MODEL_MAP[display_name][provider_name.lower()]
         print(f"--- Found display name mapping for {model_name} ({display_name}) on {provider_name}: {result} ---")
-        if isinstance(result, str) and result.upper() == "AUTO_DISCOVER":
-            result = None
         # For Cerebras, ensure we return the correct model name format
-        if result and provider_name.lower() == "cerebras" and not result.startswith("SKIP"):
+        if provider_name.lower() == "cerebras" and result and not result.startswith("SKIP"):
             return result
-        if result:
-            return result
+        return result
         
     # Also check if any key in PROVIDER_MODEL_MAP contains the model name as a substring
     for key in PROVIDER_MODEL_MAP:
@@ -3136,9 +3414,6 @@ def find_provider_specific_model(model_name, provider_name):
     # If not found in static mapping, try to find a matching model using our parser
     provider_models = []
     
-    # Parse the input model name to get its components
-    model_components = parse_model_name(model_name)
-
     # Get all models for this provider from the performance cache
     for entry in PROVIDER_PERFORMANCE_CACHE:
         entry_provider = entry.get('provider_name_scraped', '').strip().lower()
@@ -3150,20 +3425,9 @@ def find_provider_specific_model(model_name, provider_name):
         provider_models.extend(CHUTES_MODELS_CACHE)
     elif provider_name.lower() == 'groq':
         provider_models.extend(GROQ_MODELS_CACHE)
-    elif provider_name.lower() == 'cerebras':
-        provider_models.extend(CEREBRAS_MODELS_CACHE)
-    elif provider_name.lower() == 'openrouter':
-        provider_models.extend(OPENROUTER_MODELS_CACHE)
-    elif provider_name.lower() == 'together':
-        provider_models.extend(TOGETHER_MODELS_CACHE)
-    elif provider_name.lower() == 'deepinfra':
-        provider_models.extend(DEEPINFRA_MODELS_CACHE)
-    elif provider_name.lower() == 'openrouter':
-        provider_models.extend(OPENROUTER_MODELS_CACHE)
-    elif provider_name.lower() == 'together':
-        provider_models.extend(TOGETHER_MODELS_CACHE)
-    elif provider_name.lower() == 'deepinfra':
-        provider_models.extend(DEEPINFRA_MODELS_CACHE)
+    
+    # Parse the input model name to get its components
+    model_components = parse_model_name(model_name)
     
     # Find the best matching model
     best_match = None
@@ -3171,26 +3435,13 @@ def find_provider_specific_model(model_name, provider_name):
         if are_same_model(model_name, provider_model):
             best_match = provider_model
             break
-
-    # Extra-flexible matching for Qwen family: allow variant differences if family/version/size match
-    if not best_match:
-        requested = parse_model_name(model_name)
-        for provider_model in provider_models:
-            cand = parse_model_name(provider_model)
-            try:
-                if (requested.get('family') and cand.get('family') and requested['family'] == cand['family'] and
-                    requested.get('version') and cand.get('version') and requested['version'] == cand['version'] and
-                    requested.get('size_b') and cand.get('size_b') and abs(float(requested['size_b']) - float(cand['size_b'])) < 0.5):
-                    best_match = provider_model
-                    break
-            except Exception:
-                continue
     
     if best_match:
         print(f"--- Found matching model for {model_name} on {provider_name}: {best_match} ---")
-        # For Cerebras: return exact match, no override
-        if provider_name.lower() == "cerebras":
-            return best_match
+        # For Cerebras, if we found a Qwen 3 32B variant, always use the correct API name
+        if provider_name.lower() == "cerebras" and "qwen" in best_match.lower() and "32b" in best_match.lower():
+            print(f"--- Overriding Cerebras Qwen 3 32B model name to: qwen-3-32b ---")
+            return "qwen-3-32b"
         return best_match
     
     # If no exact match found, try to find a similar model based on family and size
@@ -3283,8 +3534,11 @@ def find_provider_specific_model(model_name, provider_name):
         # Special handling for Qwen models
         elif 'qwen' in model_components['family'].lower():
             if provider_name.lower() == 'cerebras':
-                # Allow larger Qwen 3 variants (e.g., 235B); try as-is and let call_cerebras_api handle aliases
-                return model_name
+                # Cerebras supports Qwen 3 32B
+                if '3' in str(model_components['version']) and '32' in str(model_components['size_b']):
+                    return "qwen-3-32b"
+                else:
+                    return "SKIP_PROVIDER"
             elif provider_name.lower() == 'groq':
                 # Groq supports Qwen 3 32B with different model names for reasoning/non-reasoning
                 if '3' in str(model_components['version']) and '32' in str(model_components['size_b']):
@@ -3604,6 +3858,11 @@ async def call_chutes_api(model, messages):
     except Exception as e:
         print(f"--- Chutes API error: {e} ---")
         return None
+
+# Legacy function - replaced by call_ish_api_with_continuation
+def call_ish_api(model, messages):
+    """Call ISH API with message history using streaming (legacy - use call_ish_api_with_continuation instead)."""
+    return call_ish_api_single(model, messages)
 
 if __name__ == '__main__':
     # Initialize model cache
