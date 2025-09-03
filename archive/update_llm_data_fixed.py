@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 # Define paths
-FLASK_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+FLASK_APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Go up from archive to flask_app
 LLM_LEADERBOARD_DIR = os.path.join(os.path.dirname(FLASK_APP_DIR), 'LLM-Performance-Leaderboard')
 SCRAPER_PATH = os.path.join(LLM_LEADERBOARD_DIR, 'llm_leaderboard_scraper.py')
 PROVIDER_PERFORMANCE_PATH = os.path.join(FLASK_APP_DIR, 'provider_performance.csv')
