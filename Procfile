@@ -1,1 +1,1 @@
-web: gunicorn app_enhanced_context_refreshed:app
+web: python app_enhanced_context_refreshed.py
