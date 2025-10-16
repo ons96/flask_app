@@ -42,15 +42,19 @@ except ImportError:
     SERPAPI_AVAILABLE = False
     print("Warning: serpapi not installed, SerpAPI functionality will be disabled")
 
-# Load environment variables
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path=dotenv_path)
+# Try to load local .env if it exists, but don't fail if missing (like on Koyeb)
+if os.path.exists(".env"):
+    load_dotenv()
+else:
+    print("No .env file found — using environment variables from Koyeb or system")
 
 if platform.system() == 'Windows':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from flask import Flask, request, session, redirect, url_for
 from flask_session import Session
+
+G4F_API_URL = os.getenv("G4F_API_URL", "https://api.g4f.dev/v1")
 
 # --- Configuration ---
 CHAT_STORAGE = os.path.join(os.path.dirname(__file__), "chats.json")
