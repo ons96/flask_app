@@ -65,6 +65,7 @@ BRAVE_API_KEY = os.getenv("BRAVE_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 DEEPINFRA_API_KEY = os.getenv("DEEPINFRA_API_KEY")
+G4F_API_KEY = os.getenv("G4F_API_KEY")
 
 print(f"--- API Keys Status ---")
 print(f"GOOGLE_API_KEY: {'Loaded' if GOOGLE_API_KEY else 'Missing'}")
@@ -76,6 +77,7 @@ print(f"BRAVE_API_KEY: {'Loaded' if BRAVE_API_KEY else 'Missing'}")
 print(f"OPENROUTER_API_KEY: {'Loaded' if OPENROUTER_API_KEY else 'Missing'}")
 print(f"TOGETHER_API_KEY: {'Loaded' if TOGETHER_API_KEY else 'Missing'}")
 print(f"DEEPINFRA_API_KEY: {'Loaded' if DEEPINFRA_API_KEY else 'Missing'}")
+print(f"G4F_API_KEY: {'Loaded' if G4F_API_KEY else 'Missing'}")
 
 # Model name mappings to handle duplicates and standardize display names
 MODEL_DISPLAY_NAME_MAP = {
