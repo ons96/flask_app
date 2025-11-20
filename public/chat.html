@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Provider Chat</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background-color: #000; 
+      color: #fff; 
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    }
+    .container { max-width: 600px; margin: 0 auto; padding: 10px; }
+    h1 { font-size: 16px; margin-bottom: 10px; }
+    .controls { margin-bottom: 10px; }
+    select, input[type="text"], button { 
+      width: 100%; 
+      padding: 6px; 
+      margin: 4px 0;
+      background-color: #222;
+      color: #fff;
+      border: 1px solid #444;
+      font-size: 12px;
+    }
+    .chat-box { 
+      height: 400px; 
+      overflow-y: auto; 
+      background-color: #1a1a1a; 
+      padding: 10px; 
+      margin: 10px 0;
+      border: 1px solid #444;
+    }
+    .message {
+      margin: 8px 0;
+      padding: 6px;
+      border-radius: 3px;
+    }
+    .user-msg {
+      background-color: #003;
+      text-align: right;
+    }
+    .ai-msg {
+      background-color: #300;
+    }
+    .error {
+      background-color: #330;
+      color: #f88;
+    }
+    .loading {
+      background-color: #333;
+      color: #aaa;
+      font-style: italic;
+    }
+    button { cursor: pointer; }
+    button:active { opacity: 0.8; }
+    .status { font-size: 11px; color: #666; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Multi-Provider Chat</h1>
+    
+    <div class="controls">
+      <label>Provider:</label>
+      <select id="provider">
+        <option value="puter">Puter (Free)</option>
+        <option value="groq">Groq (if configured)</option>
+        <option value="openrouter">OpenRouter (if configured)</option>
+      </select>
+
+      <label>Model:</label>
+      <select id="model">
+        <option value="gpt-4o-mini">GPT-4o Mini</option>
+        <option value="gpt-4o">GPT-4o</option>
+        <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+        <option value="mixtral-8x7b-32768">Mixtral (Groq)</option>
+      </select>
+
+      <label>Message:</label>
+      <input type="text" id="message" placeholder="Type your message..." />
+      <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <div class="chat-box" id="chatBox"></div>
+
+    <div class="status" id="status">Ready</div>
+  </div>
+
+  <script>
+    const API_URL = '/api/chat-multi-provider';
+    const chatBox = document.getElementById('chatBox');
+    const status = document.getElementById('status');
+
+    function addMessage(text, type = 'ai') {
+      const div = document.createElement('div');
+      div.className = `message ${type}-msg`;
+      div.textContent = text;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function sendMessage() {
+      const message = document.getElementById('message').value.trim();
+      const provider = document.getElementById('provider').value;
+      const model = document.getElementById('model').value;
+
+      if (!message) return;
+
+      addMessage(message, 'user');
+      document.getElementById('message').value = '';
+      status.textContent = 'Loading...';
+      addMessage('...', 'loading');
+
+      fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, model, provider }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.error) {
+            chatBox.lastChild.remove();
+            addMessage(`Error: ${data.message}`, 'error');
+            status.textContent = `Error: ${data.message}`;
+          } else {
+            chatBox.lastChild.textContent = data.response;
+            chatBox.lastChild.className = 'message ai-msg';
+            status.textContent = `Response from ${data.provider}:${data.model}`;
+          }
+        })
+        .catch(err => {
+          chatBox.lastChild.remove();
+          addMessage(`Network error: ${err.message}`, 'error');
+          status.textContent = `Error: ${err.message}`;
+        });
+    }
+
+    // Allow Enter to send
+    document.getElementById('message').onkeypress = function(e) {
+      if (e.key === 'Enter') sendMessage();
+    };
+  </script>
+</body>
+</html>
