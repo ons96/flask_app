@@ -49,8 +49,8 @@ def chat():
         if not messages:
             return jsonify({'error': 'No messages provided'}), 400
         
-        # If web search is enabled, add search results to context
-        if web_search and messages[-1]['role'] == 'user':
+        # If web search is enabled and available
+        if web_search and SEARCH_AVAILABLE and messages[-1]['role'] == 'user':
             search_results = perform_web_search(messages[-1]['content'])
             if search_results:
                 messages[-1]['content'] += f"
