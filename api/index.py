@@ -1,29 +1,30 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
 import os
 
-# Initialize Flask app
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../public', static_url_path='')
 CORS(app)
 
-# Get API keys from environment variables
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 
+# Serve the main chat interface
 @app.route('/')
 def home():
-    return jsonify({
-        "status": "BlackBerry AI Chatbot API", 
-        "version": "2.0",
-        "endpoints": ["/chat", "/health"]
-    })
+    return send_from_directory('../public', 'index.html')
+
+# Serve the roleplay interface
+@app.route('/roleplay')
+def roleplay():
+    return send_from_directory('../public', 'roleplay.html')
 
 @app.route('/health')
 def health():
     return jsonify({"status": "ok"})
 
-@app.route('/chat', methods=['POST'])
+# API endpoint for chat
+@app.route('/api/chat', methods=['POST'])
 def chat():
     try:
         data = request.json
@@ -39,7 +40,7 @@ def chat():
         elif provider == 'openrouter':
             return chat_openrouter(message, model)
         else:
-            return jsonify({"error": "Invalid provider. Use 'groq' or 'openrouter'"}), 400
+            return jsonify({"error": "Invalid provider"}), 400
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -75,7 +76,7 @@ def chat_groq(message, model):
             "model": model,
             "provider": "groq"
         })
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         return jsonify({"error": f"Groq API error: {str(e)}"}), 500
 
 def chat_openrouter(message, model):
@@ -85,7 +86,7 @@ def chat_openrouter(message, model):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://blackberry-chat.vercel.app",
+        "HTTP-Referer": os.environ.get('VERCEL_URL', 'https://blackberry-chat.vercel.app'),
         "X-Title": "BlackBerry Chatbot"
     }
     
@@ -109,9 +110,8 @@ def chat_openrouter(message, model):
             "model": model,
             "provider": "openrouter"
         })
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         return jsonify({"error": f"OpenRouter API error: {str(e)}"}), 500
 
-# This is critical for Vercel
 if __name__ == '__main__':
     app.run()
