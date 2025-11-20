@@ -53,10 +53,7 @@ def chat():
         if web_search and SEARCH_AVAILABLE and messages[-1]['role'] == 'user':
             search_results = perform_web_search(messages[-1]['content'])
             if search_results:
-                messages[-1]['content'] += f"
-
-[Web Search Results]:
-{search_results}"
+                messages[-1]['content'] += f"[Web Search Results]:{search_results}"
         
         # Route to appropriate provider
         if provider == 'puter':
