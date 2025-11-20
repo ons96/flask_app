@@ -1,0 +1,140 @@
+/* Simple CSS that works on BlackBerry Classic browser */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    background-color: #1a1a1a;
+    color: #ffffff;
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    background-color: #2d2d2d;
+    padding: 10px;
+    border-bottom: 2px solid #00a8e1;
+}
+
+.header h1 {
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+
+.controls {
+    margin-bottom: 8px;
+}
+
+.controls select {
+    padding: 5px;
+    margin-right: 5px;
+    background-color: #3d3d3d;
+    color: #ffffff;
+    border: 1px solid #555;
+    font-size: 12px;
+}
+
+.roleplay-link {
+    color: #00a8e1;
+    font-size: 12px;
+    text-decoration: none;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: scroll;
+    padding: 10px;
+    background-color: #0d0d0d;
+}
+
+.message {
+    margin-bottom: 15px;
+    padding: 8px;
+    border-radius: 5px;
+    line-height: 1.4;
+}
+
+.message.user {
+    background-color: #00a8e1;
+    text-align: right;
+}
+
+.message.bot {
+    background-color: #2d2d2d;
+}
+
+.message.error {
+    background-color: #cc0000;
+}
+
+.message-label {
+    font-weight: bold;
+    font-size: 11px;
+    margin-bottom: 3px;
+    opacity: 0.8;
+}
+
+.input-container {
+    background-color: #2d2d2d;
+    padding: 10px;
+    border-top: 2px solid #00a8e1;
+}
+
+#chat-form {
+    display: flex;
+    flex-direction: column;
+}
+
+#message-input {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 8px;
+    background-color: #3d3d3d;
+    color: #ffffff;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    resize: none;
+}
+
+button {
+    padding: 10px 15px;
+    margin-right: 5px;
+    background-color: #00a8e1;
+    color: #ffffff;
+    border: none;
+    border-radius: 3px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+button:active {
+    background-color: #0086b3;
+}
+
+#clear-btn {
+    background-color: #cc0000;
+}
+
+#clear-btn:active {
+    background-color: #990000;
+}
+
+#send-btn:disabled {
+    background-color: #555;
+}
+
+.loading {
+    opacity: 0.5;
+}
