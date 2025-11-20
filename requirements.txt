@@ -1,49 +1,82 @@
-# Enhanced Flask LLM Chat Application Requirements
-# Core Flask dependencies
-Flask==2.3.3
-Flask-Session==0.5.0
-Werkzeug==2.3.7
+# ============================================================================
+# ORIGINAL REQUIREMENTS (ARCHIVED - Causes 250MB Vercel limit exceeded)
+# ============================================================================
+# # Enhanced Flask LLM Chat Application Requirements
+# # Core Flask dependencies
+# Flask==2.3.3
+# Flask-Session==0.5.0
+# Werkzeug==2.3.7
+#
+# # LLM and AI dependencies
+# g4f>=0.2.0.0  # <-- THIS IS THE MAIN CULPRIT: 200MB+ with all dependencies
+# openai>=1.0.0
+#
+# # HTTP and API dependencies
+# requests>=2.31.0
+# aiohttp>=3.9.0  # Heavy: ~10MB+ with dependencies
+# httpx>=0.25.0
+#
+# # Web scraping and search
+# beautifulsoup4>=4.12.0  # Not needed for API calls
+# duckduckgo-search>=3.9.0  # Not needed for API calls
+# lxml>=4.9.0  # Heavy: ~15MB
+#
+# # Environment and configuration
+# python-dotenv>=1.0.0
+#
+# # Data processing
+# pandas>=2.0.0  # VERY HEAVY: ~50MB
+# numpy>=1.24.0  # VERY HEAVY: ~30MB
+#
+# # Additional utilities
+# asyncio-throttle>=1.0.2
+# nest-asyncio>=1.5.8
+# typing-extensions>=4.8.0
+#
+# # Development and debugging (optional)
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+# black>=23.0.0
+# flake8>=6.0.0
+#
+# # Platform-specific dependencies
+# # Windows async support
+# pywin32>=306; sys_platform == "win32"
+#
+# # Optional API clients for enhanced functionality
+# google-generativeai>=0.3.0
+# groq>=0.4.0
+# cerebras-cloud-sdk>=1.0.0
+#
+# # Optional search API (for when DuckDuckGo is rate-limited)
+# google-search-results>=2.4.2
 
-# LLM and AI dependencies
-g4f>=0.2.0.0
-openai>=1.0.0
+# ============================================================================
+# MINIMAL REQUIREMENTS FOR VERCEL DEPLOYMENT (Under 250MB)
+# ============================================================================
 
-# HTTP and API dependencies
-requests>=2.31.0
-aiohttp>=3.9.0
-httpx>=0.25.0
+# Core Flask (lightweight: ~2MB total)
+Flask==3.0.3
+Werkzeug==3.0.1
 
-# Web scraping and search
-beautifulsoup4>=4.12.0
-duckduckgo-search>=3.9.0
-lxml>=4.9.0
+# HTTP client for API calls (lightweight: ~200KB)
+requests==2.31.0
 
-# Environment and configuration
-python-dotenv>=1.0.0
+# Environment variables (lightweight: ~50KB)
+python-dotenv==1.0.0
 
-# Data processing
-pandas>=2.0.0
-numpy>=1.24.0
+# Official Groq SDK (very lightweight: ~50KB)
+groq==0.11.0
 
-# Additional utilities
-asyncio-throttle>=1.0.2
-nest-asyncio>=1.5.8
-typing-extensions>=4.8.0
+# CORS support for BlackBerry browser (lightweight: ~20KB)
+Flask-Cors==4.0.0
 
-# Development and debugging (optional)
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-black>=23.0.0
-flake8>=6.0.0
+# ============================================================================
+# OPTIONAL: Add only if you need specific features
+# ============================================================================
 
-# Platform-specific dependencies
-# Windows async support
-pywin32>=306; sys_platform == "win32"
+# Uncomment if you need PIL for character card PNG extraction:
+# Pillow==10.1.0  # ~10MB but needed for PNG character cards
 
-# Optional API clients for enhanced functionality
-google-generativeai>=0.3.0
-groq>=0.4.0
-cerebras-cloud-sdk>=1.0.0
-
-# Optional search API (for when DuckDuckGo is rate-limited)
-google-search-results>=2.4.2
+# Uncomment if you need async support (currently not used):
+# aiohttp==3.9.0
