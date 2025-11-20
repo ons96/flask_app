@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Roleplay</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      background-color: #000; 
+      color: #fff; 
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+    .container { max-width: 600px; margin: 0 auto; padding: 8px; }
+    h1 { font-size: 14px; margin-bottom: 8px; }
+    .section { margin-bottom: 8px; }
+    label { display: block; font-size: 11px; margin-bottom: 2px; color: #aaa; }
+    select, input[type="text"], textarea, button { 
+      width: 100%; 
+      padding: 4px; 
+      margin: 2px 0;
+      background-color: #222;
+      color: #fff;
+      border: 1px solid #444;
+      font-size: 11px;
+      font-family: Arial, sans-serif;
+    }
+    textarea { height: 60px; resize: none; }
+    .char-editor { border: 1px solid #555; padding: 6px; margin: 6px 0; }
+    .chat-box { 
+      height: 300px; 
+      overflow-y: auto; 
+      background-color: #1a1a1a; 
+      padding: 6px; 
+      margin: 6px 0;
+      border: 1px solid #444;
+    }
+    .message {
+      margin: 4px 0;
+      padding: 4px;
+      font-size: 11px;
+    }
+    .user-msg {
+      background-color: #003;
+      text-align: right;
+    }
+    .ai-msg {
+      background-color: #300;
+    }
+    .error {
+      background-color: #330;
+      color: #f88;
+    }
+    .loading {
+      background-color: #333;
+      color: #aaa;
+      font-style: italic;
+    }
+    button { cursor: pointer; margin: 2px; }
+    button:active { opacity: 0.8; }
+    .status { font-size: 10px; color: #666; margin-top: 4px; }
+    .two-col { display: flex; gap: 4px; }
+    .two-col input, .two-col select { flex: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI Roleplay Chat</h1>
+    
+    <div class="section">
+      <label>Provider:</label>
+      <select id="provider">
+        <option value="puter">Puter (Free)</option>
+        <option value="groq">Groq</option>
+        <option value="openrouter">OpenRouter</option>
+      </select>
+
+      <label>Model:</label>
+      <select id="model">
+        <option value="gpt-4o-mini">GPT-4o Mini</option>
+        <option value="gpt-4o">GPT-4o</option>
+        <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+        <option value="mixtral-8x7b-32768">Mixtral (Groq)</option>
+        <option value="grok-beta">Grok Beta</option>
+      </select>
+    </div>
+
+    <div class="section char-editor">
+      <label>Character Name:</label>
+      <input type="text" id="charName" placeholder="e.g., Luna the Mystic" />
+
+      <label>Description:</label>
+      <textarea id="charDesc" placeholder="Physical appearance, background..."></textarea>
+
+      <label>Personality:</label>
+      <textarea id="charPersonality" placeholder="How they act, speak, think..."></textarea>
+
+      <label>Scenario:</label>
+      <textarea id="charScenario" placeholder="Current situation or setting..."></textarea>
+
+      <label>Example Dialogue (optional):</label>
+      <textarea id="charExample" placeholder="Example of how they speak..."></textarea>
+
+      <button onclick="loadCharFromURL()">Load from URL</button>
+      <button onclick="clearCharacter()">Clear</button>
+    </div>
+
+    <div class="chat-box" id="chatBox"></div>
+
+    <div class="section">
+      <label>Your Message:</label>
+      <input type="text" id="message" placeholder="What do you want to say?" />
+      <button onclick="sendMessage()" style="width: 100%;">Send</button>
+    </div>
+
+    <div class="status" id="status">Ready</div>
+  </div>
+
+  <script>
+    const API_URL = '/api/roleplay';
+    const chatBox = document.getElementById('chatBox');
+    const status = document.getElementById('status');
+    let messageHistory = [];
+
+    function getCharacter() {
+      return {
+        name: document.getElementById('charName').value,
+        description: document.getElementById('charDesc').value,
+        personality: document.getElementById('charPersonality').value,
+        scenario: document.getElementById('charScenario').value,
+        example_dialogue: document.getElementById('charExample').value,
+      };
+    }
+
+    function addMessage(text, type = 'ai') {
+      const div = document.createElement('div');
+      div.className = `message ${type}-msg`;
+      div.textContent = text;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function sendMessage() {
+      const message = document.getElementById('message').value.trim();
+      const provider = document.getElementById('provider').value;
+      const model = document.getElementById('model').value;
+      const character = getCharacter();
+
+      if (!message) return;
+      if (!character.name) {
+        alert('Please enter a character name');
+        return;
+      }
+
+      addMessage(message, 'user');
+      messageHistory.push({ role: 'user', content: message });
+      document.getElementById('message').value = '';
+      status.textContent = 'Loading...';
+      addMessage('...', 'loading');
+
+      fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          character,
+          model,
+          provider,
+          history: messageHistory,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.error) {
+            chatBox.lastChild.remove();
+            addMessage(`Error: ${data.message}`, 'error');
+            status.textContent = `Error: ${data.message}`;
+          } else {
+            chatBox.lastChild.textContent = data.response;
+            chatBox.lastChild.className = 'message ai-msg';
+            messageHistory.push({ role: 'assistant', content: data.response });
+            status.textContent = `${data.character_name} speaking...`;
+          }
+        })
+        .catch(err => {
+          chatBox.lastChild.remove();
+          addMessage(`Error: ${err.message}`, 'error');
+          status.textContent = `Error: ${err.message}`;
+        });
+    }
+
+    function clearCharacter() {
+      document.getElementById('charName').value = '';
+      document.getElementById('charDesc').value = '';
+      document.getElementById('charPersonality').value = '';
+      document.getElementById('charScenario').value = '';
+      document.getElementById('charExample').value = '';
+      chatBox.innerHTML = '';
+      messageHistory = [];
+    }
+
+    function loadCharFromURL() {
+      const url = prompt('Enter character card URL or paste JSON:');
+      if (!url) return;
+
+      try {
+        // Try parsing as JSON first
+        const char = JSON.parse(url);
+        document.getElementById('charName').value = char.name || '';
+        document.getElementById('charDesc').value = char.description || '';
+        document.getElementById('charPersonality').value = char.personality || '';
+        document.getElementById('charScenario').value = char.scenario || '';
+        document.getElementById('charExample').value = char.example_dialogue || '';
+        status.textContent = 'Character loaded!';
+      } catch (e) {
+        // Try fetching from URL
+        status.textContent = 'Fetching...';
+        fetch(url)
+          .then(res => res.json())
+          .then(char => {
+            document.getElementById('charName').value = char.name || '';
+            document.getElementById('charDesc').value = char.description || '';
+            document.getElementById('charPersonality').value = char.personality || '';
+            document.getElementById('charScenario').value = char.scenario || '';
+            document.getElementById('charExample').value = char.example_dialogue || '';
+            status.textContent = 'Character loaded!';
+          })
+          .catch(err => {
+            status.textContent = `Error loading character: ${err.message}`;
+          });
+      }
+    }
+
+    document.getElementById('message').onkeypress = function(e) {
+      if (e.key === 'Enter') sendMessage();
+    };
+  </script>
+</body>
+</html>
