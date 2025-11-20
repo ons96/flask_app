@@ -2,243 +2,64 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Chatbot - BlackBerry</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            background: #000;
-            color: #fff;
-            height: 100vh;
-            overflow: hidden;
-        }
-        
-        .container {
-            display: table;
-            width: 100%;
-            height: 100vh;
-        }
-        
-        .header {
-            background: #1a1a1a;
-            padding: 10px;
-            border-bottom: 2px solid #00a8e1;
-        }
-        
-        .header h1 {
-            font-size: 16px;
-            color: #00a8e1;
-            margin-bottom: 8px;
-        }
-        
-        .tabs {
-            margin-bottom: 8px;
-        }
-        
-        .tabs a {
-            display: inline-block;
-            padding: 5px 10px;
-            margin-right: 5px;
-            background: #2d2d2d;
-            color: #00a8e1;
-            text-decoration: none;
-            border-radius: 3px;
-            font-size: 12px;
-        }
-        
-        .tabs a.active {
-            background: #00a8e1;
-            color: #000;
-        }
-        
-        .settings {
-            background: #0d0d0d;
-            padding: 10px;
-            border-bottom: 1px solid #333;
-            font-size: 12px;
-        }
-        
-        .settings label {
-            display: block;
-            margin-bottom: 5px;
-            color: #aaa;
-        }
-        
-        .settings select,
-        .settings input {
-            width: 100%;
-            padding: 5px;
-            margin-bottom: 8px;
-            background: #2d2d2d;
-            color: #fff;
-            border: 1px solid #444;
-            font-size: 12px;
-        }
-        
-        .settings input[type="checkbox"] {
-            width: auto;
-            margin-right: 5px;
-        }
-        
-        #toggle-settings {
-            background: #2d2d2d;
-            color: #00a8e1;
-            padding: 5px 10px;
-            border: none;
-            cursor: pointer;
-            font-size: 11px;
-            margin-bottom: 5px;
-        }
-        
-        .settings-panel {
-            display: none;
-        }
-        
-        .settings-panel.open {
-            display: block;
-        }
-        
-        #chat-container {
-            height: calc(100vh - 280px);
-            overflow-y: scroll;
-            overflow-x: hidden;
-            padding: 10px;
-            background: #0a0a0a;
-        }
-        
-        .message {
-            margin-bottom: 12px;
-            padding: 10px;
-            border-radius: 5px;
-            line-height: 1.4;
-            word-wrap: break-word;
-            max-width: 90%;
-        }
-        
-        .message.user {
-            background: #00a8e1;
-            margin-left: auto;
-            text-align: left;
-        }
-        
-        .message.assistant {
-            background: #2d2d2d;
-            margin-right: auto;
-            border-left: 3px solid #00a8e1;
-        }
-        
-        .message.error {
-            background: #cc0000;
-        }
-        
-        .message.loading {
-            background: #1a1a1a;
-            color: #888;
-            font-style: italic;
-        }
-        
-        .message-meta {
-            font-size: 10px;
-            color: #888;
-            margin-top: 5px;
-        }
-        
-        .input-area {
-            background: #1a1a1a;
-            padding: 10px;
-            border-top: 2px solid #00a8e1;
-        }
-        
-        #user-input {
-            width: 100%;
-            padding: 8px;
-            background: #2d2d2d;
-            color: #fff;
-            border: 1px solid #444;
-            border-radius: 3px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            resize: none;
-            min-height: 50px;
-            margin-bottom: 8px;
-        }
-        
-        .button-group {
-            text-align: right;
-        }
-        
-        button {
-            padding: 8px 15px;
-            background: #00a8e1;
-            color: #fff;
-            border: none;
-            border-radius: 3px;
-            font-size: 13px;
-            cursor: pointer;
-            margin-left: 5px;
-        }
-        
+        body { font-family: Arial, sans-serif; font-size: 14px; background: #000; color: #fff; height: 100vh; overflow: hidden; }
+        .header { background: #1a1a1a; padding: 10px; border-bottom: 2px solid #00a8e1; }
+        .header h1 { font-size: 16px; color: #00a8e1; margin-bottom: 8px; }
+        .tabs a { display: inline-block; padding: 5px 10px; margin-right: 5px; background: #2d2d2d; color: #00a8e1; text-decoration: none; border-radius: 3px; font-size: 12px; }
+        .tabs a.active { background: #00a8e1; color: #000; }
+        .settings { background: #0d0d0d; padding: 10px; border-bottom: 1px solid #333; font-size: 12px; max-height: 200px; overflow-y: auto; }
+        .settings label { display: block; margin-bottom: 5px; color: #aaa; }
+        .settings select, .settings input { width: 100%; padding: 5px; margin-bottom: 8px; background: #2d2d2d; color: #fff; border: 1px solid #444; font-size: 12px; }
+        #chat-container { height: calc(100vh - 350px); overflow-y: scroll; padding: 10px; background: #0a0a0a; }
+        .message { margin-bottom: 12px; padding: 10px; border-radius: 5px; line-height: 1.4; word-wrap: break-word; max-width: 90%; }
+        .message.user { background: #00a8e1; margin-left: auto; }
+        .message.assistant { background: #2d2d2d; margin-right: auto; border-left: 3px solid #00a8e1; }
+        .message.error { background: #cc0000; }
+        .message.loading { background: #1a1a1a; color: #888; font-style: italic; }
+        .input-area { background: #1a1a1a; padding: 10px; border-top: 2px solid #00a8e1; }
+        #user-input { width: 100%; padding: 8px; background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 3px; font-family: Arial, sans-serif; font-size: 14px; resize: none; min-height: 50px; margin-bottom: 8px; }
+        button { padding: 8px 15px; background: #00a8e1; color: #fff; border: none; border-radius: 3px; font-size: 13px; cursor: pointer; margin-left: 5px; }
         button:active { background: #007799; }
         button:disabled { background: #444; cursor: not-allowed; }
-        
         #clear-btn { background: #cc3333; }
-        #clear-btn:active { background: #992222; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🤖 AI Chatbot</h1>
-            <div class="tabs">
-                <a href="/" class="active">Chat</a>
-                <a href="/roleplay">Roleplay</a>
-            </div>
-        </div>
-        
-        <div class="settings">
-            <button id="toggle-settings">⚙️ Settings</button>
-            <div id="settings-panel" class="settings-panel">
-                <label>Provider:</label>
-                <select id="provider-select">
-                    <option value="groq">Groq (Free)</option>
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="puter">Puter.js (Free)</option>
-                    <option value="custom">Custom API</option>
-                </select>
-                
-                <div id="custom-api-fields" style="display:none;">
-                    <label>API Endpoint:</label>
-                    <input type="text" id="custom-endpoint" placeholder="https://api.example.com/v1/chat/completions">
-                    <label>API Key:</label>
-                    <input type="password" id="custom-key" placeholder="sk-...">
-                </div>
-                
-                <label>Model:</label>
-                <input type="text" id="model-input" value="llama-3.1-70b-versatile" placeholder="Model name">
-                
-                <label>
-                    <input type="checkbox" id="web-search-toggle">
-                    Enable Web Search
-                </label>
-            </div>
-        </div>
-        
-        <div id="chat-container"></div>
-        
-        <div class="input-area">
-            <textarea id="user-input" placeholder="Type your message..."></textarea>
-            <div class="button-group">
-                <button id="send-btn">Send</button>
-                <button id="clear-btn">Clear</button>
-            </div>
+    <div class="header">
+        <h1>AI Chatbot</h1>
+        <div class="tabs">
+            <a href="/" class="active">Chat</a>
+            <a href="/roleplay">Roleplay</a>
         </div>
     </div>
-    
-    <!-- Puter.js CDN -->
-    <script src="https://js.puter.com/v2/"></script>
+    <div class="settings">
+        <label>Provider:</label>
+        <select id="provider-select">
+            <option value="groq">Groq (Free)</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="custom">Custom API</option>
+        </select>
+        <label>Model:</label>
+        <input type="text" id="model-input" value="llama-3.1-70b-versatile">
+        <div id="custom-fields" style="display:none;">
+            <label>API Endpoint:</label>
+            <input type="text" id="custom-endpoint" placeholder="https://api.example.com/v1/chat/completions">
+            <label>API Key:</label>
+            <input type="password" id="custom-key">
+        </div>
+    </div>
+    <div id="chat-container"></div>
+    <div class="input-area">
+        <textarea id="user-input" placeholder="Type your message..."></textarea>
+        <div>
+            <button id="send-btn">Send</button>
+            <button id="clear-btn">Clear</button>
+        </div>
+    </div>
     <script src="/static/chat.js"></script>
 </body>
 </html>

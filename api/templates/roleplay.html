@@ -2,272 +2,60 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Roleplay - BlackBerry</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            background: #000;
-            color: #fff;
-            height: 100vh;
-            overflow: hidden;
-        }
-        
-        .container {
-            height: 100vh;
-            display: table;
-            width: 100%;
-        }
-        
-        .header {
-            background: #1a1a1a;
-            padding: 10px;
-            border-bottom: 2px solid #cc00ff;
-        }
-        
-        .header h1 {
-            font-size: 16px;
-            color: #cc00ff;
-            margin-bottom: 8px;
-        }
-        
-        .tabs {
-            margin-bottom: 8px;
-        }
-        
-        .tabs a {
-            display: inline-block;
-            padding: 5px 10px;
-            margin-right: 5px;
-            background: #2d2d2d;
-            color: #cc00ff;
-            text-decoration: none;
-            border-radius: 3px;
-            font-size: 12px;
-        }
-        
-        .tabs a.active {
-            background: #cc00ff;
-            color: #000;
-        }
-        
-        .character-setup {
-            background: #0d0d0d;
-            padding: 10px;
-            border-bottom: 1px solid #333;
-            max-height: 40vh;
-            overflow-y: auto;
-        }
-        
-        .character-setup.collapsed {
-            max-height: 50px;
-            overflow: hidden;
-        }
-        
-        .character-setup label {
-            display: block;
-            margin-bottom: 5px;
-            color: #aaa;
-            font-size: 12px;
-        }
-        
-        .character-setup input,
-        .character-setup select,
-        .character-setup textarea {
-            width: 100%;
-            padding: 6px;
-            margin-bottom: 8px;
-            background: #2d2d2d;
-            color: #fff;
-            border: 1px solid #444;
-            font-size: 12px;
-        }
-        
-        .character-setup textarea {
-            min-height: 40px;
-            resize: vertical;
-        }
-        
-        .character-info {
-            background: #1a1a1a;
-            padding: 8px;
-            margin-bottom: 8px;
-            border-radius: 3px;
-            border-left: 3px solid #cc00ff;
-        }
-        
-        .character-info h3 {
-            font-size: 14px;
-            color: #cc00ff;
-            margin-bottom: 5px;
-        }
-        
-        .character-info p {
-            font-size: 11px;
-            color: #aaa;
-        }
-        
-        #toggle-character {
-            background: #2d2d2d;
-            color: #cc00ff;
-            padding: 5px 10px;
-            border: none;
-            cursor: pointer;
-            font-size: 11px;
-            margin-bottom: 8px;
-        }
-        
-        #chat-container {
-            height: calc(100vh - 350px);
-            overflow-y: scroll;
-            padding: 10px;
-            background: #0a0a0a;
-        }
-        
-        .message {
-            margin-bottom: 12px;
-            padding: 10px;
-            border-radius: 5px;
-            line-height: 1.4;
-            word-wrap: break-word;
-            max-width: 90%;
-        }
-        
-        .message.user {
-            background: #9900cc;
-            margin-left: auto;
-        }
-        
-        .message.assistant {
-            background: #2d2d2d;
-            margin-right: auto;
-            border-left: 3px solid #cc00ff;
-        }
-        
-        .message.error {
-            background: #cc0000;
-        }
-        
-        .message.loading {
-            background: #1a1a1a;
-            color: #888;
-            font-style: italic;
-        }
-        
-        .input-area {
-            background: #1a1a1a;
-            padding: 10px;
-            border-top: 2px solid #cc00ff;
-        }
-        
-        #user-input {
-            width: 100%;
-            padding: 8px;
-            background: #2d2d2d;
-            color: #fff;
-            border: 1px solid #444;
-            border-radius: 3px;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
-            resize: none;
-            min-height: 50px;
-            margin-bottom: 8px;
-        }
-        
-        button {
-            padding: 8px 15px;
-            background: #cc00ff;
-            color: #fff;
-            border: none;
-            border-radius: 3px;
-            font-size: 13px;
-            cursor: pointer;
-            margin-right: 5px;
-            margin-bottom: 5px;
-        }
-        
+        body { font-family: Arial, sans-serif; font-size: 14px; background: #000; color: #fff; height: 100vh; overflow: hidden; }
+        .header { background: #1a1a1a; padding: 10px; border-bottom: 2px solid #cc00ff; }
+        .header h1 { font-size: 16px; color: #cc00ff; margin-bottom: 8px; }
+        .tabs a { display: inline-block; padding: 5px 10px; margin-right: 5px; background: #2d2d2d; color: #cc00ff; text-decoration: none; border-radius: 3px; font-size: 12px; }
+        .tabs a.active { background: #cc00ff; color: #000; }
+        .character-setup { background: #0d0d0d; padding: 10px; border-bottom: 1px solid #333; max-height: 200px; overflow-y: auto; }
+        .character-setup label { display: block; margin-bottom: 5px; color: #aaa; font-size: 12px; }
+        .character-setup input, .character-setup select, .character-setup textarea { width: 100%; padding: 6px; margin-bottom: 8px; background: #2d2d2d; color: #fff; border: 1px solid #444; font-size: 12px; }
+        .character-setup textarea { min-height: 40px; resize: vertical; }
+        button { padding: 8px 15px; background: #cc00ff; color: #fff; border: none; border-radius: 3px; font-size: 13px; cursor: pointer; margin-right: 5px; margin-bottom: 5px; }
         button:active { background: #9900cc; }
         button:disabled { background: #444; cursor: not-allowed; }
-        
+        #chat-container { height: calc(100vh - 350px); overflow-y: scroll; padding: 10px; background: #0a0a0a; }
+        .message { margin-bottom: 12px; padding: 10px; border-radius: 5px; line-height: 1.4; word-wrap: break-word; max-width: 90%; }
+        .message.user { background: #9900cc; margin-left: auto; }
+        .message.assistant { background: #2d2d2d; margin-right: auto; border-left: 3px solid #cc00ff; }
+        .message.error { background: #cc0000; }
+        .input-area { background: #1a1a1a; padding: 10px; border-top: 2px solid #cc00ff; }
+        #user-input { width: 100%; padding: 8px; background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 3px; font-family: Arial, sans-serif; font-size: 14px; resize: none; min-height: 50px; margin-bottom: 8px; }
         #clear-btn { background: #cc3333; }
-        #clear-btn:active { background: #992222; }
-        
-        .button-group { text-align: right; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>💋 AI Roleplay</h1>
-            <div class="tabs">
-                <a href="/">Chat</a>
-                <a href="/roleplay" class="active">Roleplay</a>
-            </div>
-        </div>
-        
-        <div class="character-setup" id="character-setup">
-            <button id="toggle-character">📝 Character Setup</button>
-            
-            <div id="character-panel">
-                <div id="character-info" style="display:none;"></div>
-                
-                <label>Load Character:</label>
-                <input type="file" id="character-file" accept=".png,.json">
-                
-                <label>Or Character URL:</label>
-                <input type="text" id="character-url" placeholder="https://example.com/character.png">
-                <button id="load-url-btn">Load</button>
-                
-                <label>Or Quick Character (JSON):</label>
-                <textarea id="character-json" placeholder='{"name":"Luna","description":"A mysterious character..."}'></textarea>
-                <button id="load-json-btn">Load JSON</button>
-                
-                <hr style="border-color:#333;margin:10px 0;">
-                
-                <label>Provider:</label>
-                <select id="provider-select">
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="groq">Groq (Limited NSFW)</option>
-                    <option value="puter">Puter.js (Free)</option>
-                    <option value="custom">Custom API</option>
-                </select>
-                
-                <div id="custom-api-fields" style="display:none;">
-                    <label>API Endpoint:</label>
-                    <input type="text" id="custom-endpoint" placeholder="https://api.example.com/v1/chat/completions">
-                    <label>API Key:</label>
-                    <input type="password" id="custom-key" placeholder="sk-...">
-                </div>
-                
-                <label>Model (NSFW-friendly):</label>
-                <input type="text" id="model-input" value="meta-llama/llama-3.1-70b-instruct:free" placeholder="Model name">
-                <small style="color:#888;font-size:10px;">Try: gryphe/mythomax-l2-13b, or any uncensored model</small>
-                
-                <label>Jailbreak Level:</label>
-                <select id="jailbreak-select">
-                    <option value="none">None</option>
-                    <option value="default">Standard</option>
-                    <option value="strong">Strong</option>
-                    <option value="dan">DAN Mode</option>
-                </select>
-            </div>
-        </div>
-        
-        <div id="chat-container"></div>
-        
-        <div class="input-area">
-            <textarea id="user-input" placeholder="Type your message..." disabled></textarea>
-            <div class="button-group">
-                <button id="send-btn" disabled>Send</button>
-                <button id="clear-btn">Clear Chat</button>
-            </div>
+    <div class="header">
+        <h1>AI Roleplay</h1>
+        <div class="tabs">
+            <a href="/">Chat</a>
+            <a href="/roleplay" class="active">Roleplay</a>
         </div>
     </div>
-    
-    <script src="https://js.puter.com/v2/"></script>
+    <div class="character-setup">
+        <label>Character JSON:</label>
+        <textarea id="character-json" placeholder='{"name":"Luna","description":"A mysterious character...","personality":"Friendly and curious"}'></textarea>
+        <button id="load-json-btn">Load Character</button>
+        <label>Provider:</label>
+        <select id="provider-select">
+            <option value="openrouter">OpenRouter</option>
+            <option value="groq">Groq</option>
+        </select>
+        <label>Model:</label>
+        <input type="text" id="model-input" value="meta-llama/llama-3.1-70b-instruct:free">
+    </div>
+    <div id="chat-container"></div>
+    <div class="input-area">
+        <textarea id="user-input" placeholder="Type your message..." disabled></textarea>
+        <div>
+            <button id="send-btn" disabled>Send</button>
+            <button id="clear-btn">Clear Chat</button>
+        </div>
+    </div>
     <script src="/static/roleplay.js"></script>
 </body>
 </html>
