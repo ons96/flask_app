@@ -1,0 +1,8 @@
+{
+  "name": "puter-blackberry-chatbot",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo 'Ready to deploy'"
+  },
+  "dependencies": {}
+}
