@@ -1,4 +1,7 @@
+// ES5 compatible version for older browsers like BlackBerry
 (function() {
+    'use strict';
+    
     var models = {
         groq: ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
         openrouter: ['meta-llama/llama-3.1-70b-instruct:free', 'meta-llama/llama-3.1-8b-instruct:free', 'google/gemma-2-9b-it:free', 'mistralai/mistral-7b-instruct:free', 'qwen/qwen-2-7b-instruct:free'],
@@ -6,6 +9,7 @@
         custom: ['custom-model']
     };
     
+    // Get elements
     var chatContainer = document.getElementById('chat-container');
     var userInput = document.getElementById('user-input');
     var sendBtn = document.getElementById('send-btn');
@@ -19,43 +23,56 @@
     
     var chatHistory = [];
     
-    loadChatHistory();
-    updateModelDropdown();
-    
-    providerSelect.addEventListener('change', function() {
-        customFields.style.display = providerSelect.value === 'custom' ? 'block' : 'none';
+    // Initialize on page load
+    window.addEventListener('load', function() {
+        loadChatHistory();
         updateModelDropdown();
+        setupEventListeners();
     });
     
-    sendBtn.addEventListener('click', sendMessage);
-    regenBtn.addEventListener('click', regenerateLastMessage);
-    clearBtn.addEventListener('click', clearChat);
-    
-    userInput.addEventListener('keypress', function(e) {
-        if (e.keyCode === 13 && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
+    function setupEventListeners() {
+        if (!providerSelect) return;
+        providerSelect.addEventListener('change', function() {
+            customFields.style.display = providerSelect.value === 'custom' ? 'block' : 'none';
+            updateModelDropdown();
+        });
+        
+        if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+        if (regenBtn) regenBtn.addEventListener('click', regenerateLastMessage);
+        if (clearBtn) clearBtn.addEventListener('click', clearChat);
+        
+        if (userInput) {
+            userInput.addEventListener('keypress', function(e) {
+                if (e.keyCode === 13 && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
         }
-    });
+    }
     
     function updateModelDropdown() {
-        var provider = providerSelect.value;
-        var modelList = models[provider] || [];
+        if (!modelSelect || !providerSelect) return;
+        
+        var provider = providerSelect.value || 'groq';
+        var modelList = models[provider] || ['default-model'];
         modelSelect.innerHTML = '';
+        
         for (var i = 0; i < modelList.length; i++) {
-            var opt = document.createElement('option');
-            opt.value = modelList[i];
-            opt.textContent = modelList[i];
-            modelSelect.appendChild(opt);
+            var option = document.createElement('option');
+            option.value = modelList[i];
+            option.textContent = modelList[i];
+            modelSelect.appendChild(option);
         }
     }
     
     function sendMessage() {
+        if (!userInput) return;
         var message = userInput.value.trim();
         if (!message) return;
         
-        var provider = providerSelect.value;
-        var model = modelSelect.value;
+        var provider = providerSelect ? providerSelect.value : 'groq';
+        var model = modelSelect ? modelSelect.value : 'llama-3.1-70b-versatile';
         
         addMessage(message, 'user');
         chatHistory.push({ role: 'user', content: message });
@@ -78,7 +95,7 @@
             });
         } else {
             var payload = { messages: chatHistory, provider: provider, model: model };
-            if (provider === 'custom') {
+            if (provider === 'custom' && customEndpoint && customKey) {
                 payload.custom_endpoint = customEndpoint.value.trim();
                 payload.custom_key = customKey.value.trim();
             }
@@ -111,11 +128,11 @@
         chatHistory.pop();
         var lastMsg = chatContainer.lastElementChild;
         if (lastMsg && lastMsg.classList.contains('assistant')) {
-            lastMsg.remove();
+            lastMsg.parentNode.removeChild(lastMsg);
         }
         
-        var provider = providerSelect.value;
-        var model = modelSelect.value;
+        var provider = providerSelect ? providerSelect.value : 'groq';
+        var model = modelSelect ? modelSelect.value : 'llama-3.1-70b-versatile';
         
         var loadingId = addMessage('Regenerating...', 'loading');
         disableInput(true);
@@ -134,7 +151,7 @@
             });
         } else {
             var payload = { messages: chatHistory, provider: provider, model: model };
-            if (provider === 'custom') {
+            if (provider === 'custom' && customEndpoint && customKey) {
                 payload.custom_endpoint = customEndpoint.value.trim();
                 payload.custom_key = customKey.value.trim();
             }
@@ -154,13 +171,14 @@
     }
     
     function callPuterAPI(messages, model, callback) {
-        if (typeof puter === 'undefined' || !puter.ai || !puter.ai.chat) {
-            callback(null, 'Puter AI not available. Make sure you are using the Puter browser.');
+        if (typeof puter === 'undefined' || !puter || !puter.ai || !puter.ai.chat) {
+            callback(null, 'Puter AI not available. Use Puter browser for Puter models.');
             return;
         }
         
-        puter.ai.chat(messages.map(function(m) { return m.content; }).join('
-'), { model: model })
+        var text = messages.map(function(m) { return m.role + ': ' + m.content; }).join('
+');
+        puter.ai.chat(text, { model: model })
             .then(function(response) {
                 callback(response, null);
             })
@@ -171,12 +189,13 @@
     
     function clearChat() {
         if (!confirm('Clear all messages?')) return;
-        chatContainer.innerHTML = '';
+        if (chatContainer) chatContainer.innerHTML = '';
         chatHistory = [];
         saveChatHistory();
     }
     
     function addMessage(text, type) {
+        if (!chatContainer) return null;
         var messageDiv = document.createElement('div');
         messageDiv.className = 'message ' + type;
         messageDiv.id = 'msg-' + Date.now();
@@ -188,30 +207,36 @@
     
     function removeMessage(id) {
         var msg = document.getElementById(id);
-        if (msg) msg.remove();
+        if (msg && msg.parentNode) {
+            msg.parentNode.removeChild(msg);
+        }
     }
     
     function disableInput(disabled) {
-        userInput.disabled = disabled;
-        sendBtn.disabled = disabled;
-        regenBtn.disabled = disabled;
-        sendBtn.textContent = disabled ? 'Sending...' : 'Send';
+        if (userInput) userInput.disabled = disabled;
+        if (sendBtn) sendBtn.disabled = disabled;
+        if (regenBtn) regenBtn.disabled = disabled;
+        if (sendBtn) sendBtn.textContent = disabled ? 'Sending...' : 'Send';
     }
     
     function saveChatHistory() {
         try {
-            localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+            }
         } catch (e) {}
     }
     
     function loadChatHistory() {
         try {
-            var stored = localStorage.getItem('chatHistory');
-            if (stored) {
-                chatHistory = JSON.parse(stored);
-                for (var i = 0; i < chatHistory.length; i++) {
-                    var msg = chatHistory[i];
-                    addMessage(msg.content, msg.role === 'user' ? 'user' : 'assistant');
+            if (typeof localStorage !== 'undefined') {
+                var stored = localStorage.getItem('chatHistory');
+                if (stored) {
+                    chatHistory = JSON.parse(stored);
+                    for (var i = 0; i < chatHistory.length; i++) {
+                        var msg = chatHistory[i];
+                        addMessage(msg.content, msg.role === 'user' ? 'user' : 'assistant');
+                    }
                 }
             }
         } catch (e) {}
@@ -219,6 +244,8 @@
     
     function callAPI(endpoint, payload, callback) {
         var xhr = new XMLHttpRequest();
+        if (!xhr) return;
+        
         xhr.open('POST', endpoint, true);
         xhr.setRequestHeader('Content-Type', 'application/json');
         xhr.timeout = 90000;
@@ -245,10 +272,16 @@
             callback(null, 'Network error');
         };
         
-        xhr.ontimeout = function() {
-            callback(null, 'Request timed out');
-        };
+        if (xhr.ontimeout) {
+            xhr.ontimeout = function() {
+                callback(null, 'Request timed out');
+            };
+        }
         
-        xhr.send(JSON.stringify(payload));
+        try {
+            xhr.send(JSON.stringify(payload));
+        } catch (e) {
+            callback(null, 'Failed to send request');
+        }
     }
 })();
