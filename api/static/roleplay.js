@@ -1,10 +1,14 @@
+// ES5 compatible version for older browsers like BlackBerry
 (function() {
+    'use strict';
+    
     var models = {
         groq: ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
         openrouter: ['meta-llama/llama-3.1-70b-instruct:free', 'meta-llama/llama-3.1-8b-instruct:free', 'google/gemma-2-9b-it:free'],
         puter: ['claude-3.5-sonnet', 'gpt-4o', 'llama-3.1-70b', 'llama-3.1-405b']
     };
     
+    // Get elements
     var chatContainer = document.getElementById('chat-container');
     var userInput = document.getElementById('user-input');
     var sendBtn = document.getElementById('send-btn');
@@ -12,7 +16,6 @@
     var clearBtn = document.getElementById('clear-btn');
     var providerSelect = document.getElementById('provider-select');
     var modelSelect = document.getElementById('model-select');
-    
     var fileBtn = document.getElementById('file-btn');
     var urlBtn = document.getElementById('url-btn');
     var jsonBtn = document.getElementById('json-btn');
@@ -25,88 +28,103 @@
     var conversationHistory = [];
     var loadMode = null;
     
-    updateModelDropdown();
+    // Initialize on page load
+    window.addEventListener('load', function() {
+        if (providerSelect) updateModelDropdown();
+        setupEventListeners();
+    });
     
-    providerSelect.addEventListener('change', updateModelDropdown);
+    function setupEventListeners() {
+        if (providerSelect) {
+            providerSelect.addEventListener('change', updateModelDropdown);
+        }
+        
+        if (fileBtn) fileBtn.addEventListener('click', showFileUpload);
+        if (urlBtn) urlBtn.addEventListener('click', showUrlInput);
+        if (jsonBtn) jsonBtn.addEventListener('click', showJsonInput);
+        if (fileUpload) fileUpload.addEventListener('change', loadCharacterFromFile);
+        if (loadBtn) loadBtn.addEventListener('click', loadCurrentInput);
+        if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+        if (regenBtn) regenBtn.addEventListener('click', regenerateLastMessage);
+        if (clearBtn) clearBtn.addEventListener('click', clearChat);
+        
+        if (userInput) {
+            userInput.addEventListener('keypress', function(e) {
+                if (e.keyCode === 13 && !e.shiftKey && !userInput.disabled) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+        }
+    }
     
-    fileBtn.addEventListener('click', function() {
+    function showFileUpload() {
         loadMode = 'file';
         hideAllInputs();
-        fileUpload.click();
-    });
+        if (fileUpload) fileUpload.click();
+    }
     
-    urlBtn.addEventListener('click', function() {
+    function showUrlInput() {
         loadMode = 'url';
         hideAllInputs();
-        urlInput.style.display = 'block';
-        loadBtn.style.display = 'inline-block';
-    });
+        if (urlInput) urlInput.style.display = 'block';
+        if (loadBtn) loadBtn.style.display = 'inline-block';
+        if (urlInput) urlInput.focus();
+    }
     
-    jsonBtn.addEventListener('click', function() {
+    function showJsonInput() {
         loadMode = 'json';
         hideAllInputs();
-        jsonInput.style.display = 'block';
-        loadBtn.style.display = 'inline-block';
-    });
-    
-    fileUpload.addEventListener('change', function(e) {
-        if (e.target.files.length > 0) {
-            loadCharacterFromFile(e.target.files[0]);
-        }
-    });
-    
-    loadBtn.addEventListener('click', function() {
-        if (loadMode === 'url') {
-            loadCharacterFromURL(urlInput.value.trim());
-        } else if (loadMode === 'json') {
-            loadCharacterFromJSON(jsonInput.value.trim());
-        }
-    });
-    
-    sendBtn.addEventListener('click', sendMessage);
-    regenBtn.addEventListener('click', regenerateLastMessage);
-    clearBtn.addEventListener('click', clearChat);
-    
-    userInput.addEventListener('keypress', function(e) {
-        if (e.keyCode === 13 && !e.shiftKey && !userInput.disabled) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+        if (jsonInput) jsonInput.style.display = 'block';
+        if (loadBtn) loadBtn.style.display = 'inline-block';
+        if (jsonInput) jsonInput.focus();
+    }
     
     function hideAllInputs() {
-        urlInput.style.display = 'none';
-        jsonInput.style.display = 'none';
-        loadBtn.style.display = 'none';
+        if (urlInput) urlInput.style.display = 'none';
+        if (jsonInput) jsonInput.style.display = 'none';
+        if (loadBtn) loadBtn.style.display = 'none';
     }
     
     function updateModelDropdown() {
-        var provider = providerSelect.value;
-        var modelList = models[provider] || [];
+        if (!modelSelect || !providerSelect) return;
+        var provider = providerSelect.value || 'openrouter';
+        var modelList = models[provider] || ['meta-llama/llama-3.1-70b-instruct:free'];
         modelSelect.innerHTML = '';
+        
         for (var i = 0; i < modelList.length; i++) {
-            var opt = document.createElement('option');
-            opt.value = modelList[i];
-            opt.textContent = modelList[i];
-            modelSelect.appendChild(opt);
+            var option = document.createElement('option');
+            option.value = modelList[i];
+            option.textContent = modelList[i];
+            modelSelect.appendChild(option);
         }
     }
     
-    function loadCharacterFromFile(file) {
+    function loadCharacterFromFile(e) {
+        if (!e.target.files || e.target.files.length === 0) return;
+        var file = e.target.files[0];
         var reader = new FileReader();
-        reader.onload = function(e) {
-            if (file.name.endsWith('.json')) {
+        reader.onload = function(evt) {
+            if (file.name.indexOf('.json') > -1) {
                 try {
-                    var character = JSON.parse(e.target.result);
+                    var character = JSON.parse(evt.target.result);
                     setCharacter(character);
                 } catch (err) {
-                    alert('Invalid JSON file');
+                    alert('Invalid JSON file: ' + err.message);
                 }
-            } else if (file.name.endsWith('.png')) {
-                alert('PNG character card parsing not yet implemented. Use JSON or URL instead.');
+            } else {
+                alert('PNG character card support coming soon. Use JSON files for now.');
             }
         };
         reader.readAsText(file);
+    }
+    
+    function loadCurrentInput() {
+        if (loadMode === 'url' && urlInput) {
+            loadCharacterFromURL(urlInput.value.trim());
+        } else if (loadMode === 'json' && jsonInput) {
+            loadCharacterFromJSON(jsonInput.value.trim());
+        }
     }
     
     function loadCharacterFromURL(url) {
@@ -114,12 +132,14 @@
             alert('Please enter a URL');
             return;
         }
-        addMessage('Loading character from URL...', 'loading');
-        callAPI('/api/character/parse', { url: url }, function(data, error) {
-            chatContainer.innerHTML = '';
+        if (chatContainer) addMessage('Loading character from URL...', 'loading');
+        
+        var payload = { url: url };
+        callAPI('/api/character/parse', payload, function(data, error) {
+            if (chatContainer) chatContainer.innerHTML = '';
             if (error) {
                 alert('Failed to load character: ' + error);
-            } else {
+            } else if (data && data.character) {
                 setCharacter(data.character);
             }
         });
@@ -140,28 +160,30 @@
     
     function setCharacter(character) {
         currentCharacter = character;
-        userInput.disabled = false;
-        sendBtn.disabled = false;
-        regenBtn.disabled = false;
-        var charName = character.name || character.data && character.data.name || 'Character';
-        userInput.placeholder = 'Chat with ' + charName + '...';
+        if (userInput) userInput.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        if (regenBtn) regenBtn.disabled = false;
+        var charName = character.name || (character.data && character.data.name) || 'Character';
+        if (userInput) userInput.placeholder = 'Chat with ' + charName + '...';
         conversationHistory = [];
-        chatContainer.innerHTML = '';
+        if (chatContainer) chatContainer.innerHTML = '';
         addMessage('Character loaded: ' + charName, 'assistant');
         hideAllInputs();
     }
     
+    // Rest of the roleplay functions (sendMessage, regenerate, etc.) remain the same as before
     function sendMessage() {
         if (!currentCharacter) {
             alert('Please load a character first');
             return;
         }
         
+        if (!userInput) return;
         var message = userInput.value.trim();
         if (!message) return;
         
-        var provider = providerSelect.value;
-        var model = modelSelect.value;
+        var provider = providerSelect ? providerSelect.value : 'openrouter';
+        var model = modelSelect ? modelSelect.value : 'meta-llama/llama-3.1-70b-instruct:free';
         
         addMessage(message, 'user');
         conversationHistory.push({ role: 'user', content: message });
@@ -205,12 +227,12 @@
         conversationHistory.pop();
         var lastMsg = chatContainer.lastElementChild;
         if (lastMsg && lastMsg.classList.contains('assistant')) {
-            lastMsg.remove();
+            lastMsg.parentNode.removeChild(lastMsg);
         }
         
         var lastUserMsg = conversationHistory[conversationHistory.length - 1].content;
-        var provider = providerSelect.value;
-        var model = modelSelect.value;
+        var provider = providerSelect ? providerSelect.value : 'openrouter';
+        var model = modelSelect ? modelSelect.value : 'meta-llama/llama-3.1-70b-instruct:free';
         
         var loadingId = addMessage('Regenerating...', 'loading');
         disableInput(true);
@@ -242,7 +264,7 @@
     }
     
     function callPuterRoleplayAPI(message, callback) {
-        if (typeof puter === 'undefined' || !puter.ai || !puter.ai.chat) {
+        if (typeof puter === 'undefined' || !puter || !puter.ai || !puter.ai.chat) {
             callback(null, 'Puter AI not available');
             return;
         }
@@ -265,11 +287,12 @@ Assistant:';
     
     function clearChat() {
         if (!confirm('Clear conversation?')) return;
-        chatContainer.innerHTML = '';
+        if (chatContainer) chatContainer.innerHTML = '';
         conversationHistory = [];
     }
     
     function addMessage(text, type) {
+        if (!chatContainer) return null;
         var messageDiv = document.createElement('div');
         messageDiv.className = 'message ' + type;
         messageDiv.id = 'msg-' + Date.now();
@@ -281,17 +304,21 @@ Assistant:';
     
     function removeMessage(id) {
         var msg = document.getElementById(id);
-        if (msg) msg.remove();
+        if (msg && msg.parentNode) {
+            msg.parentNode.removeChild(msg);
+        }
     }
     
     function disableInput(disabled) {
-        userInput.disabled = disabled;
-        sendBtn.disabled = disabled;
-        regenBtn.disabled = disabled;
+        if (userInput) userInput.disabled = disabled;
+        if (sendBtn) sendBtn.disabled = disabled;
+        if (regenBtn) regenBtn.disabled = disabled;
     }
     
     function callAPI(endpoint, payload, callback) {
         var xhr = new XMLHttpRequest();
+        if (!xhr) return;
+        
         xhr.open('POST', endpoint, true);
         xhr.setRequestHeader('Content-Type', 'application/json');
         xhr.timeout = 90000;
@@ -318,10 +345,16 @@ Assistant:';
             callback(null, 'Network error');
         };
         
-        xhr.ontimeout = function() {
-            callback(null, 'Request timed out');
-        };
+        if (xhr.ontimeout) {
+            xhr.ontimeout = function() {
+                callback(null, 'Request timed out');
+            };
+        }
         
-        xhr.send(JSON.stringify(payload));
+        try {
+            xhr.send(JSON.stringify(payload));
+        } catch (e) {
+            callback(null, 'Failed to send request');
+        }
     }
 })();
