@@ -11,21 +11,25 @@
         .header h1 { font-size: 16px; color: #00a8e1; margin-bottom: 8px; }
         .tabs a { display: inline-block; padding: 5px 10px; margin-right: 5px; background: #2d2d2d; color: #00a8e1; text-decoration: none; border-radius: 3px; font-size: 12px; }
         .tabs a.active { background: #00a8e1; color: #000; }
-        .settings { background: #0d0d0d; padding: 10px; border-bottom: 1px solid #333; font-size: 12px; max-height: 200px; overflow-y: auto; }
+        .settings { background: #0d0d0d; padding: 10px; border-bottom: 1px solid #333; font-size: 12px; max-height: 150px; overflow-y: auto; }
         .settings label { display: block; margin-bottom: 5px; color: #aaa; }
         .settings select, .settings input { width: 100%; padding: 5px; margin-bottom: 8px; background: #2d2d2d; color: #fff; border: 1px solid #444; font-size: 12px; }
-        #chat-container { height: calc(100vh - 350px); overflow-y: scroll; padding: 10px; background: #0a0a0a; }
+        #chat-container { height: calc(100vh - 310px); overflow-y: scroll; padding: 10px; background: #0a0a0a; }
         .message { margin-bottom: 12px; padding: 10px; border-radius: 5px; line-height: 1.4; word-wrap: break-word; max-width: 90%; }
         .message.user { background: #00a8e1; margin-left: auto; }
         .message.assistant { background: #2d2d2d; margin-right: auto; border-left: 3px solid #00a8e1; }
         .message.error { background: #cc0000; }
         .message.loading { background: #1a1a1a; color: #888; font-style: italic; }
         .input-area { background: #1a1a1a; padding: 10px; border-top: 2px solid #00a8e1; }
-        #user-input { width: 100%; padding: 8px; background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 3px; font-family: Arial, sans-serif; font-size: 14px; resize: none; min-height: 50px; margin-bottom: 8px; }
-        button { padding: 8px 15px; background: #00a8e1; color: #fff; border: none; border-radius: 3px; font-size: 13px; cursor: pointer; margin-left: 5px; }
+        .input-row { display: flex; gap: 5px; align-items: flex-end; margin-bottom: 8px; }
+        #user-input { flex: 1; padding: 8px; background: #2d2d2d; color: #fff; border: 1px solid #444; border-radius: 3px; font-family: Arial, sans-serif; font-size: 14px; resize: none; min-height: 50px; }
+        .button-group { display: flex; gap: 5px; }
+        button { padding: 8px 15px; background: #00a8e1; color: #fff; border: none; border-radius: 3px; font-size: 13px; cursor: pointer; white-space: nowrap; }
         button:active { background: #007799; }
         button:disabled { background: #444; cursor: not-allowed; }
         #clear-btn { background: #cc3333; }
+        #regen-btn { background: #ff9900; }
+        #custom-fields { display: none; }
     </style>
 </head>
 <body>
@@ -41,11 +45,12 @@
         <select id="provider-select">
             <option value="groq">Groq (Free)</option>
             <option value="openrouter">OpenRouter</option>
+            <option value="puter">Puter AI (Free)</option>
             <option value="custom">Custom API</option>
         </select>
         <label>Model:</label>
-        <input type="text" id="model-input" value="llama-3.1-70b-versatile">
-        <div id="custom-fields" style="display:none;">
+        <select id="model-select"></select>
+        <div id="custom-fields">
             <label>API Endpoint:</label>
             <input type="text" id="custom-endpoint" placeholder="https://api.example.com/v1/chat/completions">
             <label>API Key:</label>
@@ -54,9 +59,12 @@
     </div>
     <div id="chat-container"></div>
     <div class="input-area">
-        <textarea id="user-input" placeholder="Type your message..."></textarea>
-        <div>
+        <div class="input-row">
+            <textarea id="user-input" placeholder="Type your message..."></textarea>
             <button id="send-btn">Send</button>
+        </div>
+        <div class="button-group">
+            <button id="regen-btn">Regenerate</button>
             <button id="clear-btn">Clear</button>
         </div>
     </div>
